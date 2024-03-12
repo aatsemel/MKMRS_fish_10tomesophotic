@@ -1,0 +1,189 @@
+---
+title: "Data processing for chapter 3: 10-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+ A. Fish_abund df 
+ C. factors3 df
+ D. Fish_Inv_fact combined by "tag" df 
+---
+
+### step 1 load data library etc and set wd
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(here)
+
+# Define the path to your CSV file using here()
+csv_path <- here("data", "fishsurvey_sub2022.csv")
+csv_path1 <- here("data", "monitoring_sites.csv")
+
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+sites <- read.csv(csv_path1)
+complex.inic <- read.csv(here("R.generated.Data", "HOBO_compl_45.csv"))
+
+
+fish_data <-merge(fish_data,sites, by= "site_id") 
+
+# Replace Sdot yam with SdotYam
+
+fish_data$site[fish_data$site == 'Sdot yam'] <- 'SdotYam'
+fish_data$season[fish_data$season == 'fall'] <- 'Fall'
+fish_data$species[fish_data$species == 'Diplodos cervinus'] <- 'Diplodus cervinus'
+fish_data$species[fish_data$species == 'Salpa salpa'] <- 'Sarpa salpa'
+
+fish_data = subset(fish_data, select = -c(tag) )
+fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,season,sample_year))
+
+head(fish_data)
+```
+
+```{r}
+#change date to char,and summarize
+fish_date_site_species <-fish_data %>%
+  mutate(date_char = as.character(sample_date))
+
+head (fish_date_site_species)
+
+```
+
+### Subsetting DATA: to include data =="Achziv" \|site=="SdotYam sites, fish_filter will encompass data without fish empty transects and other outliers; all_data_clean includes fish empty transects and outliers and fill be used for richness and diversity calcs
+
+```{r Subsetting DATA}
+#selecting sublist for comparisons
+fish_filter<-fish_date_site_species %>% filter((site=="Achziv" | site=="SdotYam"))
+ 
+fish_filter <-   fish_filter%>%
+  filter(distance < 5.1)
+
+
+
+head(fish_filter)
+Visibility <- fish_filter %>%
+  select(12,22) %>%
+ unique()
+head(Visibility)
+```
+
+###making 3 column abudance data
+
+```{r}
+
+com_mat<-fish_filter%>%
+   dplyr::select(15,22)
+com_mat<-mutate(com_mat, occ =1 ) 
+
+occ_int<-as.integer(com_mat$occ)
+
+head(com_mat)
+```
+
+###making Fish abudance matrix
+
+```{r}
+
+SumBySpecies<- ddply(com_mat, c("tag","species"), summarise,
+               occurance = sum(occ))
+head(SumBySpecies)
+
+#There are 2 ways. either use 
+SumBySpecies_mat <-matrify(SumBySpecies)
+distinct(SumBySpecies_mat)
+#or the next:
+#SumBySpecies_mat <-  dcast(SumBySpecies,tag~species)
+head(SumBySpecies_mat)
+
+
+```
+
+###making Fish abudance table filtering empty species
+
+```{r}
+Fish_abund<-as.data.frame(SumBySpecies_mat)
+
+Fish_abund_filtered <- Fish_abund[, colSums(Fish_abund != 0) > 0]
+
+
+
+
+```
+### Fish Abundance matrix : all_data_clean 
+```{r}
+#Change NAs to zero
+ 
+all_data_clean <- Fish_abund_filtered
+all_data_clean[is.na(all_data_clean)] = 0 
+
+
+head(all_data_clean)
+
+not_empty(all_data_clean[0, ])
+not_empty(all_data_clean[, 0])
+
+write.csv(all_data_clean, here("R.generated.Data", "45Fish_data_clean.csv"))
+
+
+```
+### Invertebrate summary according to taxonomy_group : allFish10.45dataFact
+
+
+```{r}
+
+Inv.Grp.data <- read.csv(here( "Data","inv_group_mat_wis.csv"))
+Inv.Grp.data = subset(Inv.Grp.data, select = -c(tag) )
+Inv.Grp.data<- Inv.Grp.data %>% mutate (tag= paste0(site
+,depth,transect,season,year))
+head(Inv.Grp.data)
+# Add a new column with the row names
+allFish10.45data <-all_data_clean
+
+library(tibble)
+
+# Convert row names to a column
+Fish_abund_filtered <- rownames_to_column(Fish_abund_filtered, var = "RowID")
+colnames(Fish_abund_filtered)[colnames(Fish_abund_filtered) == "RowID"] <- "tag"
+
+colnames(Inv.Grp.data)
+Inv.Grp.factors <-select(Inv.Grp.data,Algae,Bryozoan,Hard.Substrate, Hydrozoa, Soft.Substrate,Sponge,tag, 11:19)
+
+head(Inv.Grp.factors)
+
+Inv.Grp.factors <-as.data.frame(Inv.Grp.factors)
+Fish_abund_filtered <-as.data.frame(Fish_abund_filtered)
+
+head(allFish10.45dataFact)
+DepthFishdataFact <-select(allFish10.45dataFact, 1, 56:69)
+ #there are errors in the "Reserve" column
+
+write.csv(Fish_abund_filtered, here("R.generated.Data","allFish10.45data.csv"))
+
+anyDuplicated(names(Fish_abund_filtered))
+anyDuplicated(names(Inv.Grp.factors))
+
+```
+###Combine visibility and complexity factors into the DepthFishdataFact df
+```{r}
+
+DepthFishdataFact <-left_join(DepthFishdataFact, Visibility, by = "tag")
+DepthFishdataFact <-left_join(DepthFishdataFact, complex.inic, by = "tag")
+DepthFishdataFact = subset(DepthFishdataFact, select = -c(X) )
+write.csv(DepthFishdataFact, here("R.generated.Data","Fish.FactorsGrp.wis.csv"))
+```
+
