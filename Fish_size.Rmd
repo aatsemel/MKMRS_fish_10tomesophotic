@@ -1,0 +1,57 @@
+---
+title: "FishSize"
+author: "AT"
+date: "2024-02-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("rfishbase")
+library("dplyr")
+library("here")
+```
+
+```{r}
+fish<- read.csv(here("R.generated.Data", "Fish.Long_45.csv"))
+
+
+fishes <-as.list(c(unique(fish$species) ))
+
+values_to_exclude   <- as.list(c("Epinephelus sp", "Gobius sp","Dasyatis sp","Symphodus sp","Echeneis sp","Siganus sp","Sardin sp","Scomber sp"))
+fishes_filtered <-setdiff(fishes, values_to_exclude)
+fishes_filtered <-as.data.frame(fishes_filtered)
+```
+###Looping through a and b #in unique(fish$species)
+```{r}
+
+# Initialize an empty dataframe to store the results
+a_b_site <- data.frame()
+
+# Loop through fishes_filtered
+for (i in fishes_filtered) {
+    # Calculate length-weight coefficients
+    palloni <- length_weight(i)
+    
+    # Check if palloni is not empty
+    if (nrow(palloni) > 0) {
+        # Convert columns to characters and add FBspecies column
+        palloni <- data.frame(FBspecies = rep(i, nrow(palloni)),
+                              a = as.character(palloni$a),
+                              b = as.character(palloni$b),
+                              Locality = as.character(palloni$Locality))
+        
+        # Bind the intermediate dataframe to a_b_site
+        a_b_site <- rbind(a_b_site, palloni)
+    }
+}
+
+write.csv(a_b_site, here("R.generated.Data", "Fishbase45m.a.b.csv"))
+
+
+
+
+```
+
+

@@ -1,0 +1,260 @@
+---
+title: "Data processing for chapter 3: 10-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+ A. Fish_abund df 
+ C. factors3 df
+ D. Fish_Inv_fact combined by "tag" df 
+---
+
+### step 1 load data library etc and set wd
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(here)
+
+here<-here::here
+
+# Define the path to your CSV file using here()
+csv_path <- here("data", "fishsurvey_sub2022.csv")
+csv_path1 <- here("data", "monitoring_sites.csv")
+
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+sites <- read.csv(csv_path1)
+complex.inic <- read.csv(here("Data", "HOBO_compl_45.csv"))
+
+
+fish_data <-merge(fish_data,sites, by= "site_id") 
+
+# Replace Sdot yam with SdotYam
+
+fish_data$site[fish_data$site == 'Sdot yam'] <- 'SdotYam'
+fish_data$season[fish_data$season == 'fall'] <- 'Fall'
+fish_data = subset(fish_data, select = -c(tag) )
+fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,season,sample_year))
+#Make sure Achziv is Reserve and Sdot Yam Not
+
+head(fish_data)
+```
+###QA
+```{r}
+
+# Group by "tag" and count unique "sample_date" values
+result <- fish_data %>%
+  group_by(tag) %>%
+  summarise(unique_dates = n_distinct(sample_date)) %>%
+  filter(unique_dates > 1)
+
+# Print the result
+print(result)
+```
+
+### Subsetting DATA: to include data =="Achziv" \|site=="SdotYam sites, fish_filter will encompass data without fish empty transects and other outliers; all_data_clean includes fish empty transects and outliers and fill be used for richness and diversity calcs
+
+```{r Subsetting DATA}
+#selecting sublist for comparisons
+fish_filter<-fish_data %>% filter((site=="Achziv" | site=="SdotYam"))
+visibility_distribution <- table(fish_filter$visibility)
+print(visibility_distribution)
+
+fish_filter <-   fish_filter%>%
+  filter(distance < 5.1)%>%
+  filter(species != "Epinephelus sp") %>%
+  filter(species != "Siganus sp") %>%
+   filter(species != "Dasyatis.sp" ) %>%
+  filter(species != "Empty transect")
+fish_filter$reserve <- ifelse(fish_filter$site == "Achziv", # if the month is Achziv
+                         "R", # if its true write R
+                         "N") # if its false write Fall
+head(fish_filter)
+```
+##before we will convert the data to the wide format and start plotting we will add two more summary columns that will come to use later on. lets calculate the total number of individuals per survey and the total number of species.
+#A. calculate the total number of individuals per species 
+```{r}
+
+fish_long <- fish_filter %>%
+ select(-transect,-a_b,-habitat, -depth, -factor_visibility, -observer, -size,-distance) %>%
+ relocate(species,.after = tag) %>%
+  mutate( occ =1 ) %>% 
+ dplyr::group_by(across(site_id:species)) %>% 
+ dplyr::summarise(total_ind = sum(occ))
+```
+#B. Calculate  the total number of species (n_species_sample)and total individuals per survey (n_ind_sample))
+
+```{r}
+fish_long<-fish_long %>%
+  dplyr::group_by(tag)%>% 
+  dplyr::mutate(n_species_sample = n_distinct(species),
+          n_ind_sample= sum(total_ind)) %>%
+  dplyr::ungroup()
+head(fish_long)
+```
+##Fall and spring long data sets
+
+```{r}
+fish_longFall<-fish_long %>%
+  dplyr::filter(season =="Fall")
+head(fish_longFall)
+
+fish_longSpring<- fish_long %>%
+  dplyr::filter(season =="Spring")
+head(fish_longSpring)
+```
+
+
+###Finally, lets convert our data to wide format:
+
+
+```{r}
+fish_wide<- spread(fish_long,species,total_ind,fill = 0)
+head(fish_wide)
+colnames(fish_wide)
+
+
+```
+
+###Lets remove taxa in the genus 
+```{r}
+fish_wide<- fish_wide %>%
+  select(-"Dasyatis sp", -"Gobius sp", -"Symphodus sp")
+```
+###Creating Spring and Fall datasets
+
+```{r}
+fish_wide_spring<- spread(fish_longSpring,species,total_ind,fill = 0)
+head(fish_wide_spring)
+
+fish_wide_fall<- spread(fish_longFall,species,total_ind,fill = 0)
+head(fish_wide_spring)
+```
+
+###making Fish abudance table filtering empty species
+
+```{r}
+
+
+fish_wide <- fish_wide[, colSums(fish_wide != 0) > 0]
+
+write.csv(fish_wide, here("R.generated.Data", "45Fish_data_clean.csv"))
+write.csv(fish_wide_spring, here("R.generated.Data", "SpringFish_data_clean.csv"))
+
+write.csv(fish_wide_fall, here("R.generated.Data", "FallFish_data_clean.csv"))
+```
+
+### Invertebrate summary according to taxonomy_group : allFish10.45dataFact
+
+
+```{r}
+
+Inv.Grp.data <- read.csv(here( "Data","inv_group_mat_wis.csv"))
+Inv.Grp.data = subset(Inv.Grp.data, select = -c(tag) )
+Inv.Grp.data<- Inv.Grp.data %>% mutate (tag= paste0(site
+,depth,transect,season,year))
+head(Inv.Grp.data)
+
+colnames(Inv.Grp.data)
+Inv.Grp.factors <-select(Inv.Grp.data,Algae,Bryozoan,Hard.Substrate, Hydrozoa, Soft.Substrate,Sponge,tag, 11:19)
+
+head(Inv.Grp.factors)
+
+Inv.Grp.factors <-as.data.frame(Inv.Grp.factors)
+DepthFishdataINv <-select(Inv.Grp.factors, 1:7)
+
+
+
+
+
+```
+###Combine Rock cover wiskonsin transformed and complexity factors into the DepthFishdataFact df
+```{r}
+
+DepthFishdataFact <-left_join(fish_wide, DepthFishdataINv, by = "tag")
+DepthFishdataFact <-left_join(DepthFishdataFact, complex.inic, by = "tag")
+head(DepthFishdataFact)
+DepthFishdataFact <-DepthFishdataFact %>%
+  relocate(65:78,.after = tag) 
+head(DepthFishdataFact)
+DepthFishdataFact<- subset(DepthFishdataFact, select = -c(X) )
+write.csv(DepthFishdataFact, here("R.generated.Data","Fish.FactorsGrp.wis.csv"))
+```
+
+###Plotting
+
+```{r}
+out_F_data <-filter(DepthFishdataFact, tag !="Achziv254Spring2017")
+ggplot(data = out_F_data,aes(x = Curvature, y = - mean_depth, color = site))+
+  geom_point() +ylab("Depth (m)") +xlab("Curvature") +theme_classic() 
+  #geom_label(aes(label = tag), hjust = .8, vjust = -.5) #+ scale_x_continuous(limits = c(1, 1.2)) 
+```
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = LogVR, y = - mean_depth, color = site))+
+  geom_point() +ylab("Depth (m)") +xlab("Log(Vertical Relief)") +theme_classic()  
+```
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = Algae, y = - mean_depth, color = site))+
+  geom_point() +ylab("Depth (m)") +xlab("Algae relative abundance") + theme_classic()
+```
+
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = Soft.Substrate, y = - depth_category, color = season))+
+  geom_jitter() +ylab("Depth (m)") +xlab("Soft substrate relative abundance")+ facet_wrap(~ site_id)+
+    theme_classic()
+```
+
+```{r}
+# lets plot it for all sites:
+
+  ggplot(data =DepthFishdataFact,aes(x = sample_date,y= Algae,group = depth_category,color = as.factor(season)))+
+    geom_point()+
+  facet_wrap(~ site_id)+ 
+  theme_classic()
+```
+
+##plotting the relationship between species and individuals number:
+```{r}
+ggplot(data=fish_wide,
+       aes(x=log2(n_ind_sample),
+           y=n_species_sample,
+           color = season))+
+        xlab("Log2(Abundance)")+
+       ylab("Number of species")+
+      ggtitle("Relationship between abundance and species")+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~ site_id) +theme_classic()  +scale_color_discrete("Season")
+```
+
+
+```{r}
+# Define breaks for the histogram with each bin twice the value of the preceding one
+custom_breaks <- 2^(0:10)
+fish_wide %>%
+  filter(depth_category== 10)%>%
+  ggplot(aes( x= log2(n_ind_sample),   y = n_species_sample, color= season))+ geom_col(breaks = custom_breaks)+
+        xlab("log2(Abundance) at 10 m depth sites")+
+       ylab("No. of species")+ theme_classic() + scale_y_continuous(limits = c(0, 30))
+```
+
+
+

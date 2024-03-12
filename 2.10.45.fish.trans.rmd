@@ -1,0 +1,612 @@
+---
+title: "2.Transformations"
+author: "AT"
+date: "2022-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("remotes")
+#remotes::install_github("gavinsimpson/ggvegan")
+library(BiodiversityR) # also loads vegan
+library(ggplot2)
+library(ggsci)
+library(ggvegan)
+library(pacman)
+p_load(rmarkdown, vegan, dplyr, ggplot2, tidyverse, gridExtra, tinytex, coenocliner)
+library (here)
+
+
+```
+
+## Get data
+
+
+```{r}
+fish<-all_data_clean
+```
+
+
+
+### Transform Fish data The Hellinger transformation involves taking the square root of the relative abundances and then applying a standard linear transformation.
+The Hellinger transformation is used to address issues related to compositional data, where the data consists of proportions or relative abundances of different components that add up to a constant (typically 1). The Hellinger transformation involves taking the square root of the relative abundances and then applying a standard linear transformation.
+Wisconsin Transformation:The Wisconsin transformation, also known as the additive log-ratio transformation, is another method used for the analysis of compositional data.
+Instead of transforming the data as a whole, the Wisconsin transformation transforms each component (e.g., each species in ecological data) separately by taking the natural logarithm of the component's proportion.
+This transformation is often applied to deal with compositional data that includes zero values because it handles zeros without issues, whereas the Hellinger transformation may encounter problems with zeros.
+The Wisconsin transformation allows you to work with the transformed components individually, which can be beneficial for certain types of analyses.
+```{r}
+sqr_fish = sqrt(fish) 
+hel_fish = decostand(fish,method="hellinger")
+wis_fish = wisconsin(fish)
+ 
+sqr_hel_fish = decostand(sqr_fish,method="hellinger") #You can also do a hellinger / wisconsin transformation on the sqr data.
+qr_wis_fish = wisconsin(sqr_fish)
+
+```
+
+### Inspect Fish data
+
+```{r}
+head(hel_fish)
+boxplot(fish,main="Raw data", xlab="Fish species", ylab="Abundance")
+boxplot(sqr_fish,main="sqr",xlab="Fish species")
+boxplot(hel_fish,main="Hellinger transformed Fish",xlab="Fish species")
+boxplot(wis_fish,main="Wisconsin transformed Fish",xlab="Fish species")
+
+ #Bar plot of the data, by site: shows species composition & total abundance
+ p1=barplot(t(fish), main = "Raw data", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+p2=barplot(t(hel_fish), main = "Hellinger transformed Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+ p3=barplot(t(wis_fish), main = "Wisconsin transformation Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+ p4=barplot(t(sqr_hel_fish), main = "sqr hellinger Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+ p5=barplot(t(sqr_fish), main = "sqr Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+
+```
+
+#NA removal and checking Env parameters distribution and transforming to linear distribution: visibility + mean_depth +      N.S + myReserve + Sediment + Algae + Rugosity +
+
+```{r}
+library(LambertW)
+
+# removing NA rows and D.vulgaris
+
+hel_fish_complete <- hel_fish[-14, ]
+
+factors3_complete <- factors3[complete.cases(factors3), ]
+plot.new()
+#ver relief
+hist(factors3_complete$VerRelief)
+
+hist(sqrt(sqrt(factors3_complete$VerRelief)))
+factors3_complete$FthRtVr <-(sqrt(sqrt(factors3_complete$VerRelief)))
+#curvature
+hist(factors3_complete$Curvature)
+hist(1/(factors3_complete$Curvature))
+factors3_complete$CurvInv <-1/(factors3_complete$Curvature)
+#visibility
+hist(factors3_complete$visibility)
+
+factors3_complete$SqrtVis <-sqrt(factors3_complete$visibility)
+hist(factors3_complete$SqrtVis)
+#mean Depth
+hist(factors3_complete$mean_depth)
+hist(sqrt(factors3_complete$mean_depth))
+factors3_complete$SqrtMnDepth <-sqrt(factors3_complete$mean_depth)
+
+#sediment
+hist(factors3_complete$Sediment)
+#algae
+hist(factors3_complete$Algae)
+mean(factors3_complete$Algae)
+hist(1/((factors3_complete$Algae)-mean(factors3_complete$Algae))+0.01)
+factors3_complete$TrAlgae <-(1/((factors3_complete$Algae)-mean(factors3_complete$Algae))+0.01)
+hist(factors3_complete$TrAlgae)
+#rugosity
+hist(factors3_complete$Rugosity)
+hist(Gaussianize(factors3_complete$Rugosity))
+factors3_complete$GauRugo <-Gaussianize(factors3_complete$Rugosity)
+hist(factors3_complete$lat)
+```
+###nMDS : dataset creation #ENVfit The function fits environmental vectors or factors onto an ordination. The projections of points onto vectors have maximum correlation with corresponding environmental variables, and the factors show the averages of factor levels. For continuous varaibles this is equal to fitting a linear trend surface (plane in 2D) for a variable (see ordisurf); this trend surface can be presented by showing its gradient (direction of steepest increase) using an arrow. The environmental variables are the dependent variables that are explained by the ordination scores, and each dependent variable is analysed separately.
+```{r}
+set.seed(123)
+nmds = metaMDS(hel_fish_complete, distance = "bray")
+nmds
+#ENVfit
+colnames(factors3_complete)
+factors_analy<-subset(factors3_complete,select=c(4, 7,16,19,22 ))
+fit <- envfit(nmds, factors_analy, perm = 999, na.rm = TRUE )
+# vegan::scores(fit, "vectors")
+# 
+# 
+# fit
+# fit.vector.scores <- vegan::scores(fit, "vectors")
+# fit.vector.scores
+```
+###Extracting nmds sites scores for ggplot
+```{r}
+
+#extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
+data.scores = as.data.frame(vegan::scores(nmds)$sites)
+#add columns to data frame 
+data.scores$Site = factors3_complete$site
+data.scores$Visibility = as.factor(factors3_complete$visibility)
+data.scores$Lat = as.factor(factors3_complete$lat)
+ data.scores$Sediment = as.factor(factors3_complete$Sediment)
+data.scores$Rugosity = as.factor(factors3_complete$Rugosity)
+data.scores$PercentRock = as.factor(factors3_complete$PercentRock)
+head(data.scores)
+```
+
+
+```{r}
+library(svglite)
+
+# Assuming you have a 'fit.vectr' data frame with 'Variable', 'NMDS1', and 'NMDS2' columns
+# Replace the values below with the actual data in your 'fit.vectr' data frame
+fit.vectr <- data.frame(
+  Variable = c("lat", "Sediment", "PercentRock", "SqrtVis", "GauRugo"),
+  NMDS1 = c(0.951650, -0.993930, -1.000000, 0.994750, -0.958550),
+  NMDS2 = c(-0.307180, -0.109977, 0.002618, 0.102307, -0.284923)
+)
+
+# Now create the plot with the 'fit.vectr' data
+xx <- ggplot(data.scores, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(size = 2, aes(colour = Site)) + 
+  theme(
+    axis.text.y = element_text(colour = "black", size = 12),
+    axis.text.x = element_text(colour = "black", size = 12),
+    legend.text = element_text(size = 12, colour ="black"),
+    legend.position = "right",
+    axis.title.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, colour = "black"),
+    legend.title = element_text(size = 14, colour = "black"),
+    panel.background = element_blank(),
+    panel.border = element_rect(colour = "black", fill = NA),
+    legend.key = element_blank()
+  ) + 
+  labs(x = "NMDS1", colour = "Site", y = "NMDS2", shape = "Ste") +
+  coord_fixed() +
+  geom_segment(data = fit.vectr, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")), colour = "grey") +
+  geom_text(data = fit.vectr, aes(x = NMDS1, y = NMDS2, label = Variable), size = 3)
+
+print(xx)
+
+```
+
+###Extracting nmds species scores for ggplot
+```{r}
+trophic.data <- read_csv("trophic.csv")
+#extract NMDS scores (x and y coordinates) for species from newer versions of vegan package
+sp.scores = as.data.frame(vegan::scores(nmds)$species)
+sp.scores$species = row.names(sp.scores)
+sp.scores = left_join(sp.scores,trophic.data, by = "species")
+sp.scores$Trophic.group = as.factor(sp.scores$Trophic.group)
+labelsp = sp.scores$species 
+
+```
+
+#plotting species
+```{r}
+# Assuming you have the 'fit.vectr' data frame with 'NMDS1', 'NMDS2', and 'Species' columns
+png(filename = "sp.NMDS.png", width = 2400, height = 1200)
+
+sp.NMDS <- ggplot(sp.scores, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(size = 6, aes(colour = Trophic.group)) + 
+  geom_text(label = labelsp, check_overlap = FALSE, size = 8, nudge_y = 0.1) +
+  theme(
+    axis.text.y = element_text(colour = "black", size = 24),
+    axis.text.x = element_text(colour = "black", size = 24),
+    legend.text = element_text(size = 24, colour = "black"),
+    legend.position = "right",
+    axis.title.y = element_text(size = 28),
+    axis.title.x = element_text(size = 28, colour = "black"),
+    legend.title = element_text(size = 28, colour = "black"),
+    panel.background = element_blank(),
+    panel.border = element_rect(colour = "black", fill = NA),
+    legend.key = element_blank()
+  ) + 
+  labs(x = "NMDS1", colour = "species", y = "NMDS2", shape = "Ste") +
+  coord_fixed()
+
+# Add arrows and labels using the fit.vectr data
+sp.NMDS <- sp.NMDS +
+  geom_segment(data = fit.vectr, aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(0.25, "cm")), colour = "grey") +
+  geom_text(data = fit.vectr, aes(x = NMDS1, y = NMDS2, label = Variable), size = 10)
+
+print(sp.NMDS)
+
+dev.off()
+
+```
+
+```{r}
+# Custom legend data
+plot.new()
+plot(nmds, "species")
+plot(fit, p.max = 0.05, col = "royalblue")
+fit
+# orditorp(nmds, "species", fontsize = 12)
+
+# #points(nmds, display = "species", 
+#        col = species_colors[nmds$species],  # Use the mapping to get colors
+#        cex = 1.5)  # Increase the cex value to make points larger
+
+# Add a custom legend
+# # legend("bottomleft",  # Position of the legend (you can adjust this to your desired location)
+#        legend = legend_labels,  # Custom legend labels
+#        fill = legend_colors,  # Custom legend colors
+#        border = NA,  # Remove borders around legend boxes
+#        bg = "white",  # Set background color for legend boxes
+#        cex = 0.6,  # Adjust the size of the legend text (you can change this value)
+#        title = "Trophic Groups")  # Title of the legend
+
+
+
+```
+
+
+###ENVFit for less vars
+```{r}
+
+fit2 <- envfit(nmds, factors4, perm = 999, na.rm = TRUE )
+scores(fit2, "vectors")
+
+# plot(nmds ) 
+# dev.new(width=5, height=4, unit="in")
+plot(nmds, "species")
+ 
+orditorp(nmds, "species")   # Gives points labels
+
+plot(fit2, p.max = 0.05)
+fit2
+
+
+```
+
+```{r}
+plot.new()
+plot(nmds, "species") 
+orditorp(nmds, "species")   # Gives points labels
+```
+
+###colinearity checks Multiple-colinearlity between variables are examined by variance inflation factor (VIF). When VIF > 10, problems of multiple-colinearlity become severe. So, remove variables of large VIF, one by one. First, prepare a new data set and check pair-wise correlations by functions cor() and pairs(). Following example uses pairs.panels function in psych package.
+```{r}
+colnames(factors3_complete)
+edat2 <- factors3_complete[,c(8,17 :22)]
+colnames(edat2)
+psych::pairs.panels(edat2)
+
+vif <- diag(solve(cor(edat2)))
+vif
+```
+
+
+
+###Constrained correspondence analysis is indeed a constrained method: CCA does not try to display all variation in the data, but only the part that can be explained by the used constraints. Consequently, the results are strongly dependent on the set of constraints and their transformations or interactions among the constraints. The shotgun method is to use all environmental variables as constraints. However, such exploratory problems are better analysed with unconstrained methods such as correspondence analysis (decorana, corresp) or non-metric multidimensional scaling (metaMDS) and environmental interpretation after analysis (envfit, ordisurf). CCA is a good choice if the user has clear and strong a priori hypotheses on constraints and is not interested in the major structure in the data set.Removed vars: site ++  + lat +TrAlgae + Sediment
+```{r}
+
+# CCA
+CCA <- cca(hel_fish_complete ~  + GauRugo+ SqrtMnDepth+ CurvInv +FthRtVr + SqrtVis  , factors3_complete)
+plot.new()
+plot(CCA, type="p")
+fitCCA <- envfit(CCA, edat2, perm = 999, display = "lc")
+
+plot(fitCCA, p.max = 0.05, col = "red")
+CCAplot<- plot(CCA, arrows = FALSE, geom = "text", colnames.label= FALSE, )
+CCAplot
+summary(CCA)
+
+#extract NMDS scores (x and y coordinates) for sites from newer versions of vegan package
+data.scores = as.data.frame(scores(CCA)$sites)
+#add columns to data frame 
+data.scores$Site = factors3_complete$site
+data.scores$Visibility = as.factor(factors3_complete$visibility)
+data.scores$Lat = as.factor(factors3_complete$lat)
+ data.scores$Sediment = as.factor(factors3_complete$Sediment)
+data.scores$Rugosity = as.factor(factors3_complete$Rugosity)
+data.scores$"Percent_Rock" = as.factor(factors3_complete$"% Rock in 1500m radius")
+head(data.scores)
+```
+
+
+
+### Variable selection for redundancy 
+To find the variables which best describe the data, we use the *ordiR2step* function. This function takes the unconstrained model, the most complicated model (the one with the most variables) we wish to test and the number of permutations to perform each step (pstep). The function uses a forwards model choice based on the adjusted R^2 values and P-values in each step. Variable selection is performed by a function ordistep(). There are two options: directions of increasing variables or decreasing variables. Here, we show an example of decreasing variables from the full model. 
+
+### function capscale is for non eucledean  dbRDA.
+
+```{r}
+#unconstrained model
+dbRDA.null=capscale(hel_fish_complete ~ 1, 
+               factors3_complete, 
+               scale=T, 
+               distance="bray")
+
+
+#Full constrained model
+dbRDA.full=capscale(hel_fish_complete ~  site +FthRtVr+ CurvInv+ SqrtMnDepth  + SqrtVis + lat + GauRugo +TrAlgae + Sediment, factors3_complete,
+               scale=T, 
+               distance="bray")
+
+
+
+
+```
+```{r}
+dbRDA.step <- ordistep(dbRDA.full, scope=formula(dbRDA.null), direction="both")
+dbRDA.step
+```
+
+
+
+##Run the selected model Testing with a small variety of env vars. Taking curvature- as complexity- where the most differences between sites are
+```{r}
+
+
+dbRDA=capscale(hel_fish_complete ~  site + CurvInv  + SqrtVis + lat  +TrAlgae + Sediment, factors3_complete,
+               scale=T, 
+               distance="bray")
+
+summary(dbRDA)
+```
+```{r}
+### initial plots, using *wa* site scores
+
+plot(dbRDA,scaling=1,display=c('wa'), main="sites by site scores")
+
+plot(dbRDA,scaling=1,display=c('lc'), main="sites by linear constraints")
+
+plot(dbRDA,scaling=1,display=c('wa','sp'), main="sites and species by site scores")
+
+plot(dbRDA,scaling=1,display=c('wa','cn'), main="sites and environmental constraints")
+
+plot(dbRDA,scaling=1,display=c('wa','cn','sp'), main="triplot")
+
+```
+
+
+### ANOVA A function anova.cca() examines significance of the dbRDA.
+Using the ANOVA test on our bdRDA object, we can also derive a pseudo-F value, which is a measure of the significance of the overall analysis. 
+A significant pseudo-F value indicates that the variance explained by the model is not due to random chance, but due to the variables used in the analysis.
+We extract the value using the *anova* function.
+
+We can use the ANOVA test to test for the significance of the model as a whole, the dbRDA axes, and the predictors. We do so by adjusting the argument *by* in the script of the ANOVA command in the following chink of code:
+by = "axis" will assess significance for each constrained axis, 
+by = "terms" will assess significance for each term (sequentially from first to last), 
+by = "margin" will assess the marginal effects of the terms 
+       (each marginal term analysed in a model with all other variables).
+
+NOTE that by not adding a *by* arguments to the ANOVA command, the test is performed for the significance of the model as a whole.
+```{r}
+# We can use the "anova" function to test for significance
+print(""); print("overall significance")
+print(anova(dbRDA))
+
+# We can find the significance of each dbRDA axis
+print(""); print("axes significance")
+print(anova(dbRDA, by='axis'))
+
+# Or of each predictor variable
+#Note that the order in which the predictors are entered can affect the end result
+print(""); print("variable significance")
+print(anova(dbRDA, by='terms'))
+
+#marginal effects
+print(""); print("marginal effects")
+print(anova(dbRDA, by='margin'))
+
+```
+###Modeling only sites against the data
+```{r}
+
+
+dbRDA2=capscale(hel_fish_complete ~  site ,data = factors3_complete, 
+               scale=T, 
+               distance="bray")
+
+summary(dbRDA2)
+```
+```{r}
+### initial plots, using *wa* site scores
+
+plot(dbRDA2,scaling=1,display=c('wa'), main="sites by site scores")
+
+plot(dbRDA2,scaling=1,display=c('lc'), main="sites by linear constraints")
+
+plot(dbRDA2,scaling=1,display=c('wa','sp'), main="sites and species by site scores")
+
+plot(dbRDA2,scaling=1,display=c('wa','cn'), main="sites and environmental constraints")
+
+plot(dbRDA2,scaling=1,display=c('wa','cn','sp'), main="triplot")
+
+```
+
+
+### ANOVA
+Using the ANOVA test on our bdRDA object, we can also derive a pseudo-F value, which is a measure of the significance of the overall analysis. 
+A significant pseudo-F value indicates that the variance explained by the model is not due to random chance, but due to the variables used in the analysis.
+We extract the value using the *anova* function.
+
+We can use the ANOVA test to test for the significance of the model as a whole, the dbRDA axes, and the predictors. We do so by adjusting the argument *by* in the script of the ANOVA command in the following chink of code:
+by = "axis" will assess significance for each constrained axis, 
+by = "terms" will assess significance for each term (sequentially from first to last), 
+by = "margin" will assess the marginal effects of the terms 
+       (each marginal term analysed in a model with all other variables).
+
+NOTE that by not adding a *by* arguments to the ANOVA command, the test is performed for the significance of the model as a whole.
+```{r}
+# We can use the "anova" function to test for significance
+print(""); print("overall significance")
+print(anova(dbRDA2))
+
+# We can find the significance of each dbRDA2 axis
+print(""); print("axes significance")
+print(anova(dbRDA2, by='axis'))
+
+# Or of each predictor variable
+#Note that the order in which the predictors are entered can affect the end result
+print(""); print("variable significance")
+print(anova(dbRDA2, by='terms'))
+
+#marginal effects
+print(""); print("marginal effects")
+print(anova(dbRDA2, by='margin'))
+
+```
+###Scenario 3
+##Run the selected model with all variables
+```{r}
+
+
+dbRDA3=capscale(hel_fish_complete ~  site +FthRtVr+ CurvInv+ SqrtMnDepth  + SqrtVis + lat + GauRugo +TrAlgae + Sediment, factors3_complete,
+               scale=T, 
+               distance="bray")
+
+summary(dbRDA3)
+```
+```{r}
+### initial plots, using *wa* site scores
+
+plot(dbRDA3,scaling=1,display=c('wa'), main="sites by site scores")
+
+plot(dbRDA3,scaling=1,display=c('lc'), main="sites by linear constraints")
+
+plot(dbRDA3,scaling=1,display=c('wa','sp'), main="sites and species by site scores")
+
+plot(dbRDA3,scaling=1,display=c('wa','cn'), main="sites and environmental constraints")
+
+plot(dbRDA3,scaling=1,display=c('wa','cn','sp'), main="triplot")
+
+```
+
+
+### ANOVA
+Using the ANOVA test on our bdRDA object, we can also derive a pseudo-F value, which is a measure of the significance of the overall analysis. 
+A significant pseudo-F value indicates that the variance explained by the model is not due to random chance, but due to the variables used in the analysis.
+We extract the value using the *anova* function.
+
+We can use the ANOVA test to test for the significance of the model as a whole, the dbRDA axes, and the predictors. We do so by adjusting the argument *by* in the script of the ANOVA command in the following chink of code:
+by = "axis" will assess significance for each constrained axis, 
+by = "terms" will assess significance for each term (sequentially from first to last), 
+by = "margin" will assess the marginal effects of the terms 
+       (each marginal term analysed in a model with all other variables).
+
+NOTE that by not adding a *by* arguments to the ANOVA command, the test is performed for the significance of the model as a whole.
+```{r}
+# We can use the "anova" function to test for significance
+print(""); print("overall significance")
+print(anova(dbRDA3))
+
+# We can find the significance of each dbRDA3 axis
+print(""); print("axes significance")
+print(anova(dbRDA3, by='axis'))
+
+# Or of each predictor variable
+#Note that the order in which the predictors are entered can affect the end result
+print(""); print("variable significance")
+print(anova(dbRDA3, by='terms'))
+
+#marginal effects
+print(""); print("marginal effects")
+print(anova(dbRDA3, by='margin'))
+
+```
+
+
+###Plotting it in ggplot
+
+```{r}
+library(svglite)
+fit.vectr <- as.data.frame(scores(fit, display = "vectors"))
+fit.vectr <- cbind(fit.vectr, Species = rownames(fit.vectr))
+fit.vectr$CCA1 <-fit.vectr$NMDS1
+fit.vectr$CCA2 <-fit.vectr$NMDS2
+xx = ggplot(data.scores, aes(x = CCA1, y = CCA2)) +
+    geom_point(size = 4, aes(colour = Site))+ 
+    theme(axis.text.y = element_text(colour = "black", size = 12), 
+    axis.text.x = element_text(colour = "black", size = 12), 
+    legend.text = element_text(size = 12, colour ="black"), 
+    legend.position = "right", axis.title.y = element_text( size = 14), 
+    axis.title.x = element_text( size = 14, colour = "black"), 
+    legend.title = element_text(size = 14, colour = "black"), 
+    panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA),
+    legend.key=element_blank()) + 
+    labs(x = "CCA1", colour = "Site", y = "CCA2", shape = "Ste") +coord_fixed() +  geom_segment(data = fit.vectr,  aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+               arrow = arrow(length = unit(0.25, "cm")), colour = "grey")+
+  geom_text(data = fit.vectr, aes(x = CCA1, y = CCA2, label = Species),  size = 3)
+ 
+xx
+p <- ggplot(data.scores) +
+  geom_point(mapping = aes(x = CCA1, y = CCA2, colour = Site)) +
+  coord_fixed() + ## need aspect ratio of 1!
+  geom_segment(data = fit.vectr,
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+               arrow = arrow(length = unit(0.25, "cm")), colour = "grey") +
+  geom_text(data = fit.vectr, aes(x = CCA1, y = CCA2, label = Species),
+            size = 3) 
+p
+ggsave("NMDS.svg")
+```
+
+### Plot
+#Create convex hulls that highlight point clusters based on grouping dataframe
+ordihull(
+  island.spp_NMS,
+  island.spp_groups$habitat,
+  display = "sites",
+  draw = c("polygon"),
+  col = NULL,
+  border = c("gray0", "gray0", "gray48", "gray48"),
+  lty = c(1, 2, 1, 2),
+  lwd = 2.5
+  )
+Visualize the ordination
+```{r}
+fig <- ordiplot(dbRDA, scaling=2, type = "none",display = "sites")
+points(fig, "sites", pch=21,bg="grey60",col="grey60")
+ordihull(dbRDA,as.integer(dune.env$Management),draw="polygon",
+         show.groups = 1,col=1, border=1,alpha = 40)
+ordihull(dbRDA,as.integer(dune.env$Management),draw="polygon",
+         show.groups = 2,col=2, border=1,alpha = 40)
+ordihull(dbRDA,as.integer(dune.env$Management),draw="polygon",
+         show.groups = 3,col=3, border=1,alpha = 40)
+ordihull(dbRDA,as.integer(dune.env$Management),draw="polygon",
+         show.groups = 4,col=4, border=1,alpha = 40)
+legend("topright",c("BF","HF","NM","SF"),
+fill=adjustcolor(c(1,2,3,4,"gold"),0.5),bty = "n",title = "Management")
+
+
+fig <- ordiplot(dbRDA, scaling=2, type = "none", display = "sites")
+points(fig, "sites", pch=21,bg="grey60",col="grey60")
+cors<-cor(scores(dbRDA)$sites,dune.env$A1)
+arrows(0,0,cors[1,]*3,cors[2,]*3,lwd=1.5,length = 0.1)
+text(cors[1,]*3.4,cors[2,]*3.4,"A1")
+```
+###Species accumulation figure
+```{r}
+head(fish)
+sp1 <- specaccum(fish)
+sp2 <- specaccum(fish, "random")
+
+summary(sp2)
+
+plot(sp1, ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue")
+boxplot(sp2, col="yellow", add=TRUE, pch="+")
+## Fit Lomolino model to the exact accumulation
+mod1 <- fitspecaccum(sp1, "lomolino")
+coef(mod1)
+fitted(mod1)
+plot(sp1)
+## Add Lomolino model using argument 'add'
+plot(mod1, add = TRUE, col=2, lwd=2)
+## Fit Arrhenius models to all random accumulations
+mods <- fitspecaccum(sp2, "arrh")
+plot(mods, col="hotpink")
+boxplot(sp2, col = "yellow", border = "blue", lty=1, cex=0.3, add= TRUE)
+## Use nls() methods to the list of models
+sapply(mods$models, AIC)
+```
+

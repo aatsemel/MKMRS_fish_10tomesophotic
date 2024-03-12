@@ -1,0 +1,515 @@
+---
+title: "Diversity"
+author: "Belmaker Lab"
+date: "2024-01-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(vegan)
+library(tidyverse)
+library(plotrix)
+library(betapart)
+library(here)
+```
+```{r}
+my_data <- read.csv(here("R.generated.Data","Fish.FactorsGrp.wis.csv")) #change to your file directory
+ head(my_data)                  
+
+my_data<- subset(my_data, select = -c(X) )
+colnames(my_data)
+my_data$site_id <- factor(my_data$site_id,ordered = T)
+my_data<-my_data%>%
+  mutate(Year_season_id =paste0(sample_year,season,site_id)) %>%
+  relocate(81,.after = tag) 
+head(my_data)
+
+species_dist<- my_data %>% select ( "Epinephelus.marginatus" , "Mycteroperca.rubra" ,"Siganus.luridus" ,   "Epinephelus.costae" ,  "Siganus.rivulatus")
+
+# Assuming your dataset is named "my_data" and you want to summarize columns "visibility", "temperature", and "humidity"
+
+# List of columns to summarize
+columns_to_summarize <- c("Epinephelus.sp","Epinephelus.marginatus","Mycteroperca.rubra","Siganus.luridus","Epinephelus.costae","Siganus.rivulatus","Siganus.sp")
+
+# Initialize an empty list to store distributions
+distributions <- list()
+
+# Calculate distribution for each column
+for (col in columns_to_summarize) {
+  distributions[[col]] <- table(my_data[[col]])
+}
+
+# Print distributions
+for (col in columns_to_summarize) {
+  cat("Distribution for column", col, ":\n")
+  print(distributions[[col]])
+}
+
+```
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpT <- ggplot(my_data, aes(x = site_id, y = LogVR)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Log(Vertical Relief)")
+
+# Set y-axis limits without truncating data points
+bxpT <- bxpT + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpT)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpT <- bxpT     + labs(x = NULL)   # 
+bxpT
+```
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpS <- ggplot(my_data, aes(x = site_id, y = Rugosity)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Rugosity")
+
+# Set y-axis limits without truncating data points
+#bxpS <- bxpS + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpS)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpS <- bxpS     + labs(x = NULL)   # 
+bxpS
+```
+
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpH <- ggplot(my_data, aes(x = site_id, y = Slope)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Slope")
+
+# Set y-axis limits without truncating data points
+#bxpH <- bxpH + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpH)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpH <- bxpH     + labs(x = NULL)   # 
+bxpH
+```
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpC <- ggplot(my_data, aes(x = site_id, y = Curvature)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Curvature")
+
+# Set y-axis limits without truncating data points
+#bxpC <- bxpC + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpC)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpC <- bxpC     + labs(x = NULL)   # 
+bxpC
+```
+### ANOVA testing
+```{r}
+# Convert depth_category to factor for correct analysis
+my_data$depth_category <- as.factor(my_data$depth_category)
+my_data_sy <-my_data %>%
+  filter(site == "SdotYam")
+# Perform two-way ANOVA
+anova_result <- aov(LogVR ~ site + depth_category , data = my_data)
+
+# Summarize the ANOVA results
+summary(anova_result)
+
+# Perform two-way ANOVA
+anova_result <- aov(LogVR ~ site + depth_category , data = my_data)
+
+# Summarize the ANOVA results
+summary(anova_result)
+
+# Perform one-way ANOVA for SY
+anova_result <- aov(LogVR ~ site + depth_category , data = my_data)
+
+```
+
+
+```{r}
+library(ggpubr)
+# Set a common x-axis titlec ommon.legend = TRUE,  common.xlabel = "N" )
+tiff("Habitat heterogeneity indices.jpeg", units="in", width=7, height=6, res=600)
+diversPlots <- ggarrange( bxpT, bxpS, bxpH, bxpC, 
+          labels = c("       a ", "      b ", "       c ", "      d   "),
+          ncol = 2, nrow = 2)   # Set a common x-axis title)
+diversPlots
+dev.off()
+diversPlots
+
+```
+###Species Matrix +Metadata
+```{r}
+first_species <- 30
+sp_matrix <- my_data[,first_species:ncol(my_data)]
+meta_data <- my_data[,1:30] # columns i want to keep from my data
+
+
+
+```
+### Hill numbers profile Allways use  hill = T
+```{r}
+renyi_profile <- renyi(sp_matrix,  
+                       scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),
+                       hill = T)
+head(renyi_profile)
+
+renyi_df<-bind_cols(meta_data,renyi_profile)
+
+renyi_df<-gather(renyi_df,"Q","Value",30:44)
+head(renyi_df)
+renyi_df<-renyi_df %>% arrange(site_id,depth_category,sample_year, season,tag) %>%
+   filter(!is.na(Q))
+
+renyi_df$Q <- as.numeric(renyi_df$Q)
+```
+
+```{r}
+head(renyi_df)
+ggplot( data = renyi_df ) +
+  aes(x = Q, y = Value, group = tag , color = -depth_category)+
+  geom_line() +
+   scale_x_continuous(limits = c(0,10)) + scale_y_continuous(limits = c(0,13)) +facet_wrap(.~site_id) +
+         labs(y = expression("Diversity  D(p) "^"Q")) +theme_classic()
+
+```
+
+
+###SEction 2: Grouping per sampling day
+```{r}
+colnames(my_data)
+group_year_data <- my_data %>% 
+  dplyr::select(sample_date, Year_season_id, site_id, depth_category, season, 28:81) %>% 
+  dplyr::group_by(sample_date, site_id,depth_category, season,Year_season_id) %>% # use this unit for analyses
+  dplyr::summarise(across(Acantholabrus.palloni:Torquigener.flavimaculosus, sum),.groups = "keep")
+head(group_year_data)
+
+
+
+```
+
+
+```{r}
+
+renyi_profile_group <- renyi(group_year_data[,-c(1:5)],
+                             scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),  hill = T)
+
+renyi_df_group<-bind_cols(group_year_data[,1:5],renyi_profile_group)
+
+#compose long df with  new Q grouping
+renyi_df_group<-gather(renyi_df_group,"Q","Value",6:20)
+
+renyi_df_group<-renyi_df_group %>% arrange(Year_season_id, site_id,depth_category, season )
+
+renyi_df_group$Q <- as.numeric(renyi_df_group$Q)
+renyi_df_group$depth_category <- as.factor(renyi_df_group$depth_category)
+head(renyi_df_group)
+```
+
+```{r}
+ggplot(renyi_df_group,aes(x=Q, y=Value, group = Year_season_id, color= season))+ 
+  geom_line()+
+  scale_x_continuous(limits = c(0,15))+facet_grid (~  depth_category + season )+ theme_classic() +
+         labs(y = expression("Diversity  D(p) "^"Q"))
+```
+#clean my environment so it will be less clutter and messy… this is the line that remove all object (except my_data and first_species) from my environment:
+```{r}
+#rm(list=setdiff(ls(), c("my_data", "group_year_data","first_species")))
+```
+
+###Pairwise  Bray-Curtis similarity
+
+# ```{r}
+# 
+# Fall_data <- my_data %>% filter(season == "Spring", site_id == "SdotYam45") # filter for example
+# sp_matrix <- Fall_data[,first_species:ncol(Fall_data)]
+# bray_results <- bray.part(sp_matrix)
+# mean(bray_results[[3]])
+# std.error(bray_results[[3]])
+# ```
+###Loop of pairwise comparisons 
+```{r}
+
+
+bray_scores_site<-list() # create an empty list to store my newly created data
+
+for (i in unique(group_year_data$site_id)){
+  
+site_data <- group_year_data %>% filter(site_id == i) # keep only the observation of sample i
+
+site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
+
+site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
+site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
+
+site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
+
+mean_bray <- mean(site_bray_results)
+se_bray <- std.error(site_bray_results)
+Site <- i
+
+bray_data_site <- data.frame(Site,mean_bray,se_bray)
+
+bray_scores_site[[i]]<-bray_data_site
+  
+}
+
+
+
+bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
+
+
+
+# lets plot:
+
+ggplot(bray_scores_site,aes(x = Site,
+                       y = mean_bray,
+                       color = Site)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +ylab(" Bray-Curtis dissimilarity")
+
+
+```
+#One site, SdotYam25 Fall and plot it vs time
+
+```{r}
+
+one_site<-my_data %>% filter(site_id == 'Achziv45', season== "Fall") %>%
+  arrange(sample_date)
+
+# Convert sample_date to Date object
+one_site$sample_date <- as.Date(one_site$sample_date, format = "%d/%m/%Y")
+
+first_species <-31
+
+bray_scores_SY25<-list() # create an empty list to store my newly created data
+
+for (i in unique(one_site$sample_date)){
+  
+knoll_data <- one_site %>% filter(sample_date == i) # keep only the observation of sample i
+
+knoll_sp_matrix <- knoll_data[,first_species:length(knoll_data)] # create species matrix
+
+knoll_bray_part <- bray.part(knoll_sp_matrix) # apply the function that calculate bray Curtis distances 
+knoll_bray_results<- knoll_bray_part[[3]] # keep only the bray Curtis results
+
+knoll_bray_results<-as.numeric(knoll_bray_results) # convert to numeric object
+
+mean_bray <- mean(knoll_bray_results)
+se_bray <- std.error(knoll_bray_results)
+
+sample_date <- i
+
+bray_data_knoll <- data.frame(sample_date,mean_bray,se_bray)
+
+bray_scores_SY25[[i]]<-bray_data_knoll
+  
+}
+
+bray_scores_SY25<-bind_rows(bray_scores_SY25)
+#change from serial to date
+bray_scores_SY25$sample_date<-as.Date(bray_scores_SY25$sample_date, origin = "1970-01-01")
+
+
+SdotYam25FallP <- ggplot(bray_scores_SY25,aes(x = sample_date,
+                       y = mean_bray,
+                       color = sample_date)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2)
+
+SdotYam25FallP + 
+  scale_x_date(date_labels = "%Y-%m-%d", date_breaks = "1 year") +
+  ylab(" Bray-Curtis dissimilarity") +
+  xlab("Survey Years") +
+  ggtitle( "Achziv 45m depth site community dissimilarity with time" ) +theme_classic() +
+  theme(legend.position = "none")
+
+
+```
+###Log transformed group data
+
+
+###Species Matrix +Metadata
+```{r}
+head(my_data)
+first_species <- 28
+
+
+
+```
+
+```{r}
+
+my_data_log<-decostand(sp_matrix, method="hellinger")
+```
+###Bray scores per site: transformed data hellinger
+```{r}
+bray_scores_log_10<-list() # create an empty list to store my newly created data
+
+for (i in unique(my_data_log$site_id)){
+  
+year_data <- my_data_log %>% filter(site_id == i) # keep only the observation of sample i
+
+year_sp_matrix <- year_data[,first_species:length(year_data)] # create species matrix
+
+year_sp_matrix_log<-decostand(year_sp_matrix,method = 'hellinger')
+
+year_bray_part_log <- bray.part(year_sp_matrix_log) # apply the function that calculate bray Curtis distances 
+
+year_bray_results_log<- year_bray_part_log[[3]] # keep only the bray Curtis results
+
+year_bray_results_log<-as.numeric(year_bray_results_log) # convert to numeric object
+
+mean_bray <- mean(year_bray_results_log) # calculate the mean bray curtis distance
+se_bray <- std.error(year_bray_results_log)# calculate SE
+Sample <- i # argument with the the name of the site
+
+bray_data_log <- data.frame(Sample,mean_bray,se_bray) # create data frame that save those variables 
+
+bray_scores_log_10[[i]]<-bray_data_log # save it in my list
+  
+}
+
+bray_scores_hell<-bind_rows(bray_scores_log_10) # convert from list to data frame
+
+# get the Years order right
+
+#bray_scores_log_10$Sample <- factor(bray_scores_log_10$Sample,levels = c("2018 Fall",                                         "2020 Spring",                                         "2020 Fall",                                         "2021 Spring"),ordered = T)
+
+# lets plot:
+
+ggplot(bray_scores_hell,aes(x = Sample,
+                       y = mean_bray,
+                       color = Sample)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2)+
+  ggtitle("Log10 transformed data")
+```
+
+###  BETA diversity components:  depth example
+
+
+```{r}
+one_site<-my_data %>% #filter(site_id ==  "Achziv45" ) %>%
+  arrange(sample_date)
+  #'Achziv10'|site_id ==  "Achziv25" | site_id
+  #filter(season == "Fall") %>%
+  
+
+# Convert sample_date to Date object
+one_site$sample_date <- as.Date(one_site$sample_date, format = "%d/%m/%Y")
+head(one_site)
+#Ach sites sp. matrix
+
+sp_matrix <- one_site[,first_species:ncol(one_site)]
+meta_data <- one_site[,1:6] # columns i want to keep from my data
+
+```
+##Incidence data- beta pairs
+```{r}
+AC_incidence <- sp_matrix %>% 
+  replace(sp_matrix > 0, 1) 
+AC_incidence_bind<-bind_cols(meta_data,AC_incidence )
+
+
+caves_beta_pairs <- beta.pair(AC_incidence)
+```
+We get 3 distance matrixes in one list:
+
+The distance which is due to species turnover between sites.
+The distance which is due to species nestedness between sites.
+The total distance (nestedness + turnonver).
+
+IMPORTANT NOTE: unlike the pairwise comparisons multi-site comparisons are sensitive to sample size! in order for the analyses to work properly you need to have equal sample in each group you want to compare! If you don’t have equal sample size in each category, continue to the next section!
+
+
+```{r}
+summary_table<-one_site %>% group_by(sample_year, season, depth_category, site_id) %>% summarise("tags"= n_distinct(tag))
+summary_table
+```
+Sample size is Good!
+
+
+```{r}
+same_effort_beta<-list()
+
+
+for (i in AC_incidence_bind$depth_category) {
+  
+  one_year <- AC_incidence_bind %>% filter(depth_category == i)
+  
+  one_year_sp_matrix <- one_year[,first_species:ncol(one_year)]
+  
+  beta_multi <- as.data.frame(beta.multi(one_year_sp_matrix))
+  
+  beta_multi$depth_category<-i
+  
+  same_effort_beta[[i]]<-beta_multi
+  
+  
+}
+
+
+
+same_effort_beta<-bind_rows(same_effort_beta)
+#same_effort_beta$site_id <- as.Date(same_effort_beta$site_id,   origin = "1970-01-01")
+
+same_effort_beta<- gather(same_effort_beta,"component","beta",1:3)
+
+same_effort_beta <- same_effort_beta %>%
+  filter(component != "beta.SOR") 
+
+ggplot(same_effort_beta)+
+  aes(x=depth_category,y=beta,fill=component)+
+  geom_bar(stat="identity",position = position_stack())+
+  ylab(expression(paste(beta,"-diversity"))) +
+  #scale_x_date(date_labels = "%Y-%m-%d", date_breaks = "2 year") +
+  ylab(" Bray-Curtis dissimilarity") +
+  xlab("Survey sites") +
+  ggtitle( "Survey sites pooled 2015-2022 community dissimilarity" ) +theme_classic() 
+```
+
+```{r}
+library(iNEXT)
+data(spider)
+head(spider)
+spideriN <-iNEXT(spider, q=c(0,1,2), datatype="abundance")
+speciesiN <- iNEXT(sp_matrix,  q=c(0,1,2), datatype="abundance")
+ggiNEXT(sp_matrix, type=3, se=TRUE, grey=FALSE,)
+```
+

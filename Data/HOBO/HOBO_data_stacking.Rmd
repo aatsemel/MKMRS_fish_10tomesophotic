@@ -1,0 +1,34 @@
+---
+title: "HOBO_data_stack"
+author: "AT"
+date: "2024-01-30"
+output: html_document
+---
+```{r Libraries,echo=T,warning=F,message=F}
+library(fractaldim)
+library(reshape2)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(features)
+library(ggplot2)
+library(ggpubr)
+library(ggridges)
+library(here)
+here<-here::here
+###Hobo data was converted from KPa to depths as follows: depths  = (Kpa-101.325)/10
+HOBO_data_10_25 <- read.csv(here("Data","HOBO","All_10_25m_cleanHOBO.csv"))
+colnames(HOBO_data_10_25)
+HOBO_data_45 <- read.csv(here("Data","HOBO","Clean45mHOBO.csv"))
+colnames(HOBO_data_45)
+HOBO_data_10_25C <- read.csv(here("Data","HOBO","SYACH10,25Cont.csv"))
+colnames(HOBO_data_10_25C)
+
+HOBO_data <- rbind(HOBO_data_10_25,HOBO_data_45,HOBO_data_10_25C)
+
+head(HOBO_data)
+output_path10 <- here("Data", "10_25_45mAch_SY_Hobo_clean.csv")
+write.csv(HOBO_data, file = output_path10)
+
+```
+
