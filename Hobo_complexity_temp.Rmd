@@ -159,13 +159,26 @@ output_path1 <- here("R.generated.Data", "HOBO_compl_45.csv")
 write.csv(HOBO_compl_indic_data_log, file = output_path1)
 
 ```
+###Checking variable distribution
+
+```{r}
+data <- HOBO_compl_indic_data_log %>%
+mutate (NorRug = 1/(Rugosity))
+
+histogram <- ggplot(data, aes(x = NorRug)) +
+    geom_histogram( fill = "skyblue", color = "black") +
+    labs(title = "Histogram", x = "NorRug", y = "Frequency") +
+    theme_minimal()
+histogram
+```
+
 
 ###Checking length distributions in the 2 library(ggrepel)
 
 ```{r}
 HOBO_length_tag <- HOBO_compl_indic_data_log %>%
   dplyr::group_by(tag) %>%
-  dplyr::summarize(site,length(depths)) %>%
+  dplyr::summarize(site_id,length(depths)) %>%
   unique()%>%
   ungroup("length(depths)") %>%
   dplyr::rename(l_d = "length(depths)")

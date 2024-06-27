@@ -20,6 +20,7 @@ We will use packages `tidyverse`, `vegan`,and `cooccur` so install and upload th
 library(tidyverse)
 library(vegan)
 library(cooccur)
+library(here)
 ```
 
 We will load three data tables for this exercise.
@@ -33,23 +34,20 @@ We will load three data tables for this exercise.
 
 ```{r message=FALSE, warning=FALSE}
 
-fully_nested <- read_csv("fully_nested.csv")
 
-not_nested <- read_csv("not_nested.csv")
-
-my_data <- read_csv(file = "fish_wide.csv")  #change to your file directory
+my_data <- read_csv(here("R.generated.Data","Fish.FactorsGrp.wis.csv") ) #change to your file directory
 
 ```
 
-Let’s turn NA to 0 for the 2 example data-sets:
+<!-- Let’s turn NA to 0 for the 2 example data-sets: -->
 
-```{r}
+<!-- ```{r} -->
 
-fully_nested[is.na(fully_nested)] <- 0 
+<!-- fully_nested[is.na(fully_nested)] <- 0  -->
 
-not_nested[is.na(not_nested)] <- 0
+<!-- not_nested[is.na(not_nested)] <- 0 -->
 
-```
+<!-- ``` -->
 
 Also, let’s subset the species matrix out of our data:
 
@@ -57,9 +55,9 @@ Also, let’s subset the species matrix out of our data:
 ```{r}
 my_data$...1<-NULL # remove this weird column that appear because of excel...
 
-NR_2018<-my_data %>% filter(Site=="NR",Year_season=="2018 Fall")
+NR_2018<-my_data 
 
-first_sp<-13
+first_sp<-32
 
 species_matrix<-NR_2018[,first_sp:ncol(NR_2018)]
 
@@ -317,13 +315,6 @@ Temperature of 0 means the matrix is completely nested. Temperature of 100 means
 ![](Quantifying diversity\nestedtemp.png)
 
 
-first lets look at the fully nested data
-
-```{r}
-nestedtemp(fully_nested)
-
-```
-
 No surprises here... the temperature = 0 
 
 lets see the score for the not-nested data:
@@ -354,8 +345,25 @@ plot(my_nest_temp, xlab = "Species", ylab="Sites",main="Extinction probability")
 
 So we have the temperature measure, but s it more or less than expected by chance?  
 
-lets use the quasi-swap method. we will use the same `oecosimu` function as before but this time we will set `nestfun = "nestedtemp"`.   
+lets use the quasi-swap method. we will use the same `oecosimu` function as before but this time we will set `nestfun = "nestedtemp"`.  
+###Using dataframes from "Ordinations" RMD
+```{r}
 
+temp_null_qs <- oecosimu(hlge_trans_data, nestfun="nestedtemp",method="quasiswap",nsimul = 100)
+temp_null_qs
+
+temp_sim_qs <- as.data.frame(t(temp_null_qs[["oecosimu"]][["simulated"]]))
+
+observed_temp <- my_nest_temp[["statistic"]][["temperature"]] 
+
+ggplot(temp_sim_qs,aes(x=V1))+
+  geom_histogram(fill = "lightblue",color = "darkblue")+
+  geom_vline(xintercept = observed_temp,color = "darkred",linetype="dashed",size = 1.1)+
+  xlab("Simulated Nestedness Temperature")+
+  ggtitle("Quasuswap null model for Nestedness Temperature")
+
+
+```
   
 ```{r}
 

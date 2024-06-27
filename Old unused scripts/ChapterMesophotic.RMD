@@ -1,0 +1,1069 @@
+---
+title: "Data processing for chapter 3: 25-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+WHEN UPDATING A NEW FISH_SURVEY FILE- CORRECT VIVIBILITY TO 7 AT AchzivR453Spring2020
+AchzivR454Spring2020
+
+---
+
+### step 1 load data library etc and set wd
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+#For Diversity calculations
+library(plotrix)
+library(betapart)
+library(here)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(ggpubr) 
+# Richness
+library(rareNMtests)
+library(mobr)
+here<-here::here
+
+
+```
+
+```{r}
+# Define the path to your CSV file using here()
+csv_path <- here("data", "fishsurvey_sub2022.csv")
+csv_path1 <- here("data", "monitoring_sites.csv")
+
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+sites <- read.csv(csv_path1)
+complex.inic <-read.csv(here("data", "EnvVar10_45.csv"))
+
+fish_data <-merge(fish_data,sites, by= "site_id") 
+
+# Replace Sdot yam with SdotYam
+
+fish_data$site[fish_data$site == 'Sdot yam'] <- 'SdotYam'
+fish_data$season[fish_data$season == 'fall'] <- 'Fall'
+fish_data = subset(fish_data, select = -c(tag) )
+fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,season,sample_year))
+#Make sure Achziv is Reserve and Sdot Yam Not
+
+head(fish_data)
+```
+
+###QA
+```{r}
+
+# Group by "tag" and count unique "sample_date" values
+result <- fish_data %>%
+  group_by(tag) %>%
+  summarise(unique_dates = n_distinct(sample_date)) %>%
+  filter(unique_dates > 1)
+
+# Print the result
+print(result)
+```
+
+### Subsetting DATA: to include data =="Achziv" \|site=="SdotYam sites, fish_filter will encompass data without fish empty transects and other outliers; all_data_clean includes fish empty transects and outliers and fill be used for richness and diversity calcs
+Filtering cryptic species and species in the genus recognition level
+
+```{r Subsetting DATA}
+#selecting sublist for comparisons
+fish_filter<-fish_data %>% filter(site=="Achziv"| site=="SdotYam" )
+visibility_distribution <- table(fish_filter$visibility)
+print(visibility_distribution)
+
+fish_filter <-   fish_filter%>%
+  filter(distance < 5.1)%>%
+  filter(species != "Epinephelus sp") %>%
+  filter(species != "Siganus sp") %>%
+   filter(species != "Dasyatis.sp" ) %>%
+  filter(species != "Empty transect") %>%
+   filter(species != "Gobius sp" ) %>%
+  filter(species != "Gobius bucchichi") %>%
+  filter(species != "Gobius vittatus") %>%
+   filter(species != "Dasyatis sp") 
+fish_filter$reserve <- ifelse(fish_filter$site == "Achziv", "R", (ifelse(fish_filter$site_id == "SdotYam45", "N", "NR"))) # if its true write R if its false write Fall
+head(fish_filter)
+
+# Filter season
+fish_filter <-   fish_filter#%>%
+ # filter(season == "Fall")
+```
+
+
+
+##before we will convert the data to the wide format and start plotting we will add two more summary columns that will come to use later on. lets calculate the total number of individuals per survey and the total number of species.
+#A. calculate the total number of individuals per species 
+```{r}
+
+fish_long <- fish_filter %>%
+  dplyr::select(-transect,-a_b,-habitat, -depth, -factor_visibility, -observer, -size,-distance) %>%
+  dplyr::relocate(species,.after = tag) %>%
+   dplyr::mutate( occ =1 ) %>% 
+ dplyr::group_by(across(site_id:species)) %>% 
+ dplyr::summarise(total_ind = sum(occ))
+```
+#B. Calculate  the total number of species (n_species_sample)and total individuals per survey (n_ind_sample))
+
+```{r}
+fish_long<-fish_long %>%
+  dplyr::group_by(tag)%>% 
+  dplyr::mutate(n_species_sample = n_distinct(species),
+          n_ind_sample= sum(total_ind)) %>%
+  dplyr::ungroup()
+head(fish_long)
+```
+
+###Finally, lets convert our data to wide format:
+
+
+```{r}
+fish_wide<- spread(fish_long,species,total_ind,fill = 0)
+head(fish_wide)
+colnames(fish_wide)
+
+
+```
+
+###making Fish abudance table filtering empty species
+
+```{r}
+
+
+fish_wide <- fish_wide[, colSums(fish_wide != 0) > 0]
+
+write.csv(fish_wide, here("R.generated.Data", "45Fish_data_clean.csv"))
+
+```
+
+### Invertebrate summary according to taxonomy_group : allFish10.45dataFact
+
+
+```{r}
+
+Inv.Grp.data <- read.csv(here( "Data","inv_group_mat_wis.csv"))
+Inv.Grp.data = subset(Inv.Grp.data, select = -c(tag) )
+Inv.Grp.data<- Inv.Grp.data %>% mutate (tag= paste0(site
+,depth,transect,season,year))
+colnames(Inv.Grp.data)
+Inv.Grp.factors <- dplyr::select(Inv.Grp.data,Algae,Bryozoan,Hard.Substrate, Hydrozoa, Soft.Substrate,Sponge,tag, 11:19)
+
+head(Inv.Grp.factors)
+
+DepthFishdataINv <- dplyr::select(Inv.Grp.factors, 1:7)
+
+
+```
+###Combine Rock cover wiskonsin transformed and complexity factors into the DepthFishdataFact df
+```{r}
+
+DepthFishdataFact <-left_join(fish_wide, DepthFishdataINv, by = "tag")
+DepthFishdataFact <-left_join(DepthFishdataFact, complex.inic, by = "tag")
+
+colnames(DepthFishdataFact)
+DepthFishdataFact <-DepthFishdataFact %>%
+  relocate("Algae" :"TempDiff",.after = tag) 
+head(DepthFishdataFact)
+colnames(DepthFishdataFact)
+
+
+```
+###Resolving date discrepencies between Fish and epibenthic cover data sets
+```{r}
+
+
+
+checktag<-dplyr::select(DepthFishdataFact,4,20,13)
+#view(checktag)
+# Update sample_date.x column where sample_date.y is not NA and is different
+DepthFishdataFact$sample_date.x[!is.na(DepthFishdataFact$sample_date.y) & DepthFishdataFact$sample_date.y != DepthFishdataFact$sample_date.x] <- DepthFishdataFact$sample_date.y[!is.na(DepthFishdataFact$sample_date.y) & DepthFishdataFact$sample_date.y != DepthFishdataFact$sample_date.x]
+#remove extra date column
+DepthFishdataFact <- DepthFishdataFact[, !names(DepthFishdataFact) %in% "sample_date.y"]
+
+# Print the updated dataframe to verify the changes
+colnames(DepthFishdataFact)
+DepthFishdataFact$sample_date <- DepthFishdataFact$sample_date.x
+DepthFishdataFact$sample_date.x <- NULL
+DepthFishdataFact <-DepthFishdataFact %>%
+  relocate(sample_date,.after = sample_year) 
+write.csv(DepthFishdataFact, here("R.generated.Data","Fish.FactorsGrp.wis.csv"))
+
+```
+####Diversity
+```{r}
+
+color6 = c("lightblue3", "blue2", "darkblue","yellow3", "darkorange", "brown")
+my_data <- DepthFishdataFact %>%
+  mutate(Year_season_id =paste0(sample_year,season,site_id)) %>%
+  relocate("Year_season_id",.after = tag) 
+ head(my_data)
+ colnames(my_data)
+```
+
+###Species Matrix +Metadata +transformations
+```{r}
+colnames(my_data)
+first_species <- 32
+sp_matrix <- my_data[,first_species:ncol(my_data)] %>%
+  select_if(~ sum(.) != 0)
+meta_data <- my_data[,1:31] # columns i want to keep from my data
+
+
+hel_trans <- decostand (sp_matrix, method = "hellinger" )
+log10_trans_hel <- decostand (hel_trans,method = "log" ,base = 10)
+log10_hel_my_data <- bind_cols(my_data[, -( first_species: ncol(my_data))], log10_trans_hel)
+colnames (log10_hel_my_data)
+```
+### Hill numbers profile Allways use  hill = T
+```{r}
+renyi_profile <- renyi(sp_matrix,  
+                       scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),
+                       hill = T)
+head(renyi_profile)
+
+renyi_df<-bind_cols(meta_data,renyi_profile)
+
+renyi_df<-gather(renyi_df,"Q","Value",30:44)
+head(renyi_df)
+renyi_df<-renyi_df %>% arrange(site_id,depth_category,sample_year, season,tag) %>%
+   filter(!is.na(Q))
+
+renyi_df$Q <- as.numeric(renyi_df$Q)
+```
+
+```{r}
+head(renyi_df)
+
+ggplot(data = renyi_df) +
+  aes(x = Q, y = Value, group = tag, color = factor(sample_date)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 10)) +
+  scale_y_continuous(limits = c(0, 13)) +
+  facet_wrap(. ~ site_id) +
+  labs(y = expression("Diversity  D(p) "^"Q")) +
+  theme_classic() +
+  theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) +
+ theme (legend.position = "none")
+
+
+
+```
+
+###SEction 2: Grouping per sampling day
+```{r}
+colnames(my_data)
+group_year_data <- my_data %>% 
+  dplyr::select(date_id, Year_season_id, site_id, depth_category, season, "Chromis chromis":"Torquigener flavimaculosus") %>% 
+  dplyr::group_by(date_id, site_id,depth_category, season,Year_season_id) %>% # use this unit for analyses
+  dplyr::summarise(across("Chromis chromis":"Torquigener flavimaculosus", sum),.groups = "keep")
+head(group_year_data)
+colnames(group_year_data)
+
+colnames(log10_hel_my_data)
+group_trans_data <- log10_hel_my_data %>% 
+  dplyr::select(date_id, site, Year_season_id, site_id, depth_category, season, "Chromis chromis":"Torquigener flavimaculosus") %>% 
+  dplyr::group_by(date_id, site, site_id,depth_category, season,Year_season_id) %>% # use this unit for analyses
+  dplyr::summarise(across("Chromis chromis":"Torquigener flavimaculosus", sum),.groups = "keep")
+head(group_trans_data)
+
+
+
+```
+
+
+```{r}
+
+renyi_profile_group <- renyi(group_year_data[,-c(1:5)],
+                             scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),  hill = T)
+
+renyi_df_group<-bind_cols(group_year_data[,1:5],renyi_profile_group)
+
+#compose long df with  new Q grouping
+renyi_df_group<-gather(renyi_df_group,"Q","Value",6:20)
+
+renyi_df_group<-renyi_df_group %>% arrange(Year_season_id, site_id,depth_category, season )
+
+renyi_df_group$Q <- as.numeric(renyi_df_group$Q)
+renyi_df_group$depth_category <- as.factor(renyi_df_group$depth_category)
+head(renyi_df_group)
+```
+```{r}
+ggplot(data = renyi_df_group) +
+  aes(x = Q, y = Value, group = Year_season_id, color = factor()) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 10)) +
+  scale_y_continuous(limits = c(0, 20)) +
+  facet_wrap(. ~ site_id) +
+  labs(y = expression("Diversity  D(p) "^"Q")) +
+  theme_classic() +
+    theme(legend.position = "none")
+     
+```
+###creating unique lists of species
+
+```{r}
+
+
+
+bray_scores_site<-list() # create an empty list to store my newly created data
+
+for (i in unique(my_data$site_id)){
+  
+site_data <- my_data %>% filter(site_id == i) # keep only the observation of sample i
+
+site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
+
+site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
+site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
+
+site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
+
+mean_bray <- mean(site_bray_results)
+se_bray <- std.error(site_bray_results)
+Site <- i
+
+bray_data_site <- data.frame(Site,mean_bray,se_bray)
+
+bray_scores_site[[i]]<-bray_data_site
+  
+}
+
+
+
+bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
+
+
+
+# lets plot:
+
+NTTransectBeta <- ggplot(bray_scores_site,aes(x = Site,
+                       y = mean_bray,
+                       color = Site)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
+  scale_color_manual(values = color6) # Specify color palette
+
+NTTransectBeta
+```
+
+###Now with transect transformed data: log10_hel_my_data 
+```{r}
+
+
+
+bray_scores_site<-list() # create an empty list to store my newly created data
+
+for (i in unique(log10_hel_my_data$site_id)){
+  
+site_data <- log10_hel_my_data %>% filter(site_id == i) # keep only the observation of sample i
+
+site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
+
+site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
+site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
+
+site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
+
+mean_bray <- mean(site_bray_results)
+se_bray <- std.error(site_bray_results)
+Site <- i
+
+bray_data_site <- data.frame(Site,mean_bray,se_bray)
+
+bray_scores_site[[i]]<-bray_data_site
+  
+}
+
+
+
+bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
+
+
+
+# lets plot:
+
+TransectBeta <- ggplot(bray_scores_site,aes(x = Site,
+                       y = mean_bray,
+                       color = Site)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
+  scale_color_manual(values = color6) # Specify color palette
+
+TransectBeta
+```
+# grouped data
+
+```{r}
+
+
+
+bray_scores_site<-list() # create an empty list to store my newly created data
+
+for (i in unique(group_year_data$site_id)){
+  
+site_data <- group_year_data %>% filter(site_id == i) # keep only the observation of sample i
+
+site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
+
+site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
+site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
+
+site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
+
+mean_bray <- mean(site_bray_results)
+se_bray <- std.error(site_bray_results)
+Site <- i
+
+bray_data_site <- data.frame(Site,mean_bray,se_bray)
+
+bray_scores_site[[i]]<-bray_data_site
+  
+}
+
+
+
+bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
+
+
+
+# lets plot:
+
+pGr <-ggplot(bray_scores_site,aes(x = Site,
+                       y = mean_bray,
+                       color = Site)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
+  scale_color_manual(values = color6) +theme_classic()  # Specify color palette +
+
+pGr
+
+
+```
+###Now with transformed data: log10_hel_my_data grouped in group_trans_data 
+
+```{r}
+bray_scores_site<-list() # create an empty list to store my newly created data
+
+for (i in unique(group_trans_data$site_id)){
+  
+site_data <- group_trans_data %>% filter(site_id == i) # keep only the observation of sample i
+
+site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
+
+site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
+site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
+
+site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
+
+mean_bray <- mean(site_bray_results)
+se_bray <- std.error(site_bray_results)
+Site <- i
+
+bray_data_site <- data.frame(Site,mean_bray,se_bray)
+
+bray_scores_site[[i]]<-bray_data_site
+  
+}
+
+
+
+bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
+```
+#grouped transformed
+
+```{r}
+PGrTrans <- ggplot(bray_scores_site,aes(x = Site,
+                       y = mean_bray,
+                       color = Site)) +
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin= mean_bray - se_bray,
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
+  scale_color_manual(values = color6) + theme_classic()  +theme(axis.title.x = element_blank() ) +
+           labs(y = "Grouped transformed Bray-Curtis dissimilarity")# Specify color palette
+
+PGrTrans
+```
+
+
+
+```{r}
+site_id_distribution <- table(fish_wide$site_id,fish_wide$season )
+print(site_id_distribution)
+```
+```{r}
+least_sampled <- 23
+
+least_sampled
+```
+##Incidence data- beta pairs
+```{r}
+AC_incidence <- sp_matrix %>% 
+  replace(sp_matrix > 0, 1) 
+AC_incidence_bind<-bind_cols(meta_data,AC_incidence )
+
+
+caves_beta_pairs <- beta.pair(AC_incidence)
+```
+
+
+```{r message=FALSE, results='hide'}
+
+
+caves_beta_sample <- beta.sample(AC_incidence, 
+            sites= least_sampled,  # how many knolls to randomly sample
+            samples = 10) # how many repetitions of (10) knolls to do 
+
+
+```
+
+
+after we understood how the function is working lets calculate the multi-site beta diversity of all the years for the site_id   
+###Sorensen beta diversity: per transect and grouped
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+
+
+caves <-my_data  
+
+caves[first_species:ncol(caves)] <-replace(caves[first_species:ncol(caves)],
+                                            caves[first_species:ncol(caves)] > 0,
+                                            1) # incident data
+
+caves_all_years<-list() # empty list
+
+for (i in unique(caves$site_id)) { # loop
+  
+  one_year <-  caves %>% filter(site_id == i)
+  
+  one_year_sp_matrix <- one_year[,first_species:ncol(one_year)]
+  
+  caves_beta_sample <- beta.sample(one_year_sp_matrix,
+            sites= 5, 
+            samples = 23)
+  
+ 
+  caves_beta_sample_data <- data.frame(mean = caves_beta_sample[["mean.values"]],
+                                    se = caves_beta_sample[["sd.values"]])
+
+  caves_beta_sample_data <-rownames_to_column(caves_beta_sample_data,'Component') 
+
+  caves_beta_sample_data$Year_season <- i
+  
+ caves_all_years[[i]]<-caves_beta_sample_data
+  
+}
+
+
+caves_all_years<-bind_rows(caves_all_years)
+
+
+```
+
+
+```{r}
+caves_all_years<-caves_all_years %>% filter(Component != "beta.SOR")
+
+ggplot(caves_all_years)+
+  aes(x=Year_season,y=mean,fill=Component)+
+  geom_bar(stat="identity",position = position_stack())+
+  ylab(expression(paste(beta,"-diversity" (Sorensen)))) +theme_classic() +
+  xlab("Site id")
+
+
+
+
+```
+We will use the function `rarefaction.sample` from the package `rareNMtests`. 
+
+In this function the first argument is the data name,  the method argument `sample-size` means that the function will use incidence data and `q = 0` is used for species richness rarefaction.  
+
+Now let's create sample based rarefaction curve for Fall 2018.  
+#  Sample based  rarefraction and individual based 
+
+```{r}
+sample_based_rare<-list()
+
+for (i in unique(my_data$site_id)) {
+
+one_year<-my_data %>% filter(site_id == i)
+year_sp_matrix <- one_year[,first_species:ncol(one_year)]
+
+rarefaction <- rarefaction.sample(year_sp_matrix, method = "sample-size", q = 0)
+
+rarefaction$Year_month<-i
+
+sample_based_rare[[i]]<- rarefaction
+  
+}
+
+sample_based_rare<-bind_rows(sample_based_rare)
+
+colnames(sample_based_rare)<-c("Samples","Richness","Site.id")
+#colvec <- c("lightblue", "blue", "darkorange", "brown")   colors according to your group
+
+Richp <- ggplot(sample_based_rare,aes(x=Samples,y= Richness,color = Site.id))+geom_line(size = 1.2) + scale_color_manual(values = color6) +theme_classic() +theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) 
+
+Richp
+```
+
+
+
+
+
+
+#Simpson
+```{r}
+sample_based_rare<-list()
+
+for (i in unique(my_data$site_id)) {
+
+one_year<-my_data %>% filter(site_id == i)
+year_sp_matrix <- one_year[,first_species:ncol(one_year)]
+
+rarefaction <- rarefaction.sample(year_sp_matrix, method = "sample-size", q = 2)
+
+rarefaction$Year_month<-i
+
+sample_based_rare[[i]]<- rarefaction
+  
+}
+
+sample_based_rare<-bind_rows(sample_based_rare)
+
+colnames(sample_based_rare)<-c("Samples","True.diversity","Site.id")
+#colvec <- c("lightblue", "blue", "darkorange", "brown")   colors according to your group
+
+TrueDp <- ggplot(sample_based_rare,aes(x=Samples,y= True.diversity,color = Site.id))+geom_line(size = 1.2) + scale_color_manual(values = color6) +theme_classic() +theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) 
+TrueDp
+
+```
+
+
+```{r}
+sample_based_rare<-list()
+
+for (i in unique(my_data$site_id)) {
+
+one_year<-my_data %>% filter(site_id == i)
+year_sp_matrix <- one_year[,first_species:ncol(one_year)]
+
+rarefaction <- rarefaction.sample(year_sp_matrix, method = "sample-size", q = 1)
+
+rarefaction$Year_month<-i
+
+sample_based_rare[[i]]<- rarefaction
+  
+}
+
+sample_based_rare<-bind_rows(sample_based_rare)
+
+colnames(sample_based_rare)<-c("Samples","Effective.diversity","Site.id")
+#colvec <- c("lightblue", "blue", "darkorange", "brown")   colors according to your group
+
+EffDp <- ggplot(sample_based_rare,aes(x=Samples,y= Effective.diversity,color = Site.id))+geom_line(size = 1.2) + scale_color_manual(values = color6) +theme_classic() +theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) 
+EffDp
+
+```
+
+
+
+```{r}
+RarePlots <- ggarrange( Richp, EffDp,TrueDp,
+          labels = c("Richness ", "Effective diveristy", "True diversity"),          ncol = 3, nrow = 1, common.legend = TRUE )  # Set a common x-axis title)
+     
+ RarePlots
+
+```
+
+###Group based individual rarefaction
+
+
+group the data
+
+
+```{r}
+
+
+real_group<-my_data %>% dplyr::select(site_id,32:ncol(my_data))%>% 
+ dplyr::group_by(site_id) %>% 
+   dplyr::summarise(across(.fns = sum), .groups = "drop")
+head(real_group)
+```
+
+
+###Group based individual rarefaction
+
+```{r}
+
+
+ind_based_rare<-list()
+
+
+for (i in unique(real_group$site_id)) {
+
+one_year<-real_group %>% filter(site_id == i)
+year_sp_matrix <- one_year[,2:ncol(one_year)]
+
+rarefaction <- rarefaction.individual(year_sp_matrix, method = "sample-size", q = 0)
+
+rarefaction$site_id<-i
+
+ind_based_rare[[i]]<- rarefaction
+  
+}
+
+ind_based_rare<-bind_rows(ind_based_rare)
+
+colnames(ind_based_rare)<-c("Individuals","Richness","site_id")
+
+ggplot(ind_based_rare,aes(x=Individuals,y=Richness,color = site_id))+
+  geom_line(size = 1.5)+ scale_color_manual(values = color6) + theme_classic()
+
+
+```
+
+
+```{r}
+check<-real_group %>% mutate(total_abundance = rowSums(real_group[2:length(real_group)]),
+         total_rihcness = rowSums(real_group[2:length(real_group)]>0)) %>% 
+  select(site_id,total_abundance,total_rihcness)
+  
+
+```
+###Ordinations on log base 10 due to siganiid densities
+
+```{r}
+library(ggfortify)
+
+#remove outlier Achziv 45 sample
+Outlier_ac4516792 <- my_data %>%
+  filter(date_id == "16792") %>%
+   filter(depth_category >10)
+my_data = my_data[!my_data$date_id == "16792",]
+species_matrix <- my_data[,first_species:ncol(my_data)]
+meta_data <- my_data[,1:29] # columns i want to keep from my data
+
+log_trans_data <- decostand (species_matrix, method = "log",base = 10)
+helge_trans_data <- decostand (species_matrix, method = "hellinger")
+log10_trans_hel <- decostand (helge_trans_data, method = "log",base = 10)
+```
+
+my_data_complete   <- my_data[complete.cases(my_data), ]
+colnames(my_data_complete)
+
+my_data_complete <- my_data_complete[, colSums(my_data_complete != 0) > 0]
+colnames(my_data_complete)
+species_matrix_c <- my_data_complete[,first_species:ncol(my_data_complete)]
+meta_data_c <- my_data_complete[,1:31] # columns i want to keep from my data
+helge_trans_data_c <- decostand (species_matrix_c, method = "hellinger")
+log10_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 10)
+
+###RDA models A. complete epibentich +fish
+```{r}
+rda_data <-  my_data%>%
+  select(1:19,32:ncol(my_data))# columns i want to keep from my data
+colnames(rda_data)
+rda_data_complete   <- rda_data[complete.cases(rda_data), ]
+rda_data_complete$site_id <-as.factor(rda_data_complete$site_id)
+colnames(rda_data_complete)
+species_rda_c <- rda_data_complete[,20:ncol(rda_data_complete)]
+meta_rda_c <- rda_data_complete[,1:19] # columns i want to keep from my data
+helge_trans_data_c <- decostand (species_rda_c, method = "hellinger")
+log10_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 10)
+
+
+
+```
+```{r}
+rda_results <- rda(log10_trans_hel_c ~ season + depth_category+ site+ Hard.Substrate +Soft.Substrate + Algae ,
+                data = rda_data_complete)
+
+rda_results
+summary (rda_results)
+```
+log10_trans_hel_c ~ season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
+                data = rda_data_complete
+                
+#CCA was tested but it explains even less of the variation.
+cca_results <- cca(log10_trans_hel~ season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
+                data = my_data,
+                na.action = na.omit) 
+
+plot(cca_results, scaling = 3)
+
+cca_results
+
+
+```{r}
+ordistep(rda_results ,na.action = na.omit)
+```
+# ```{r}
+# rda(log10_trans_hel_c ~  season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
+#                 data = rda_data_complete)
+# signi.Inv <- rda(log10_trans_hel_c ~  season + depth_category+ reserve+ Soft.Substrate + Algae ,
+#                 data = rda_data_complete)
+# summary (signi.Inv)
+# ```
+
+
+Remember. When you see "Inertia", think "Variance". When you see "constrained" think "explained". So, in this example you can see that a proportion of 0.1121 of the inertia is explained. In words, the site_id,Site, knoll surface area and  depth affects ~10% of the all the community variance.
+
+
+now lets plot the RDA using the `plot` function.
+useful terminology for RDA plots:  
+
+* sites = the scores (coordinates) or each row (i.e sample)    
+* species = the unconstrained variables, actual species in our case    
+* bp = bi plot, the effect of each constrained variable on the data    
+* cn = centroid of non-continues constrained variable (for example Site or season)   
+### RDA significance
+
+
+The significance of your RDA can be tested using the function `anova.cca` which preform Anova like permutation tests. 
+
+* don't be confused by the `cca` in the function name it can operate also on RDA
+
+*Use either significance testing or model selection approch - not both!*
+```{r}
+
+ordiplot(rda_results, scaling = 2)
+```
+
+```{r}
+
+
+
+colvec <- color6 #  colors according to your group
+
+
+
+plot(rda_results,xlim = c(-2,2), 
+     ylim = c(-3,3),
+     # label the plot (title, and axes)
+     main = "Biplot RDA - scaling 2",
+     xlab = paste0("RDA1 (11.4) %"), 
+     ylab = paste0("RDA2 (4.4%)") ) # plot RDA
+
+with(rda_data_complete, points(rda_results,
+                     display = "sites", col = colvec[site_id],
+                     pch = 21, bg = colvec[site_id]),cex=0.5) # add color to the scores
+
+with(rda_data_complete, legend("bottomright", legend = levels(site_id), bty = "n",
+                       col = colvec, pch = 21, pt.bg = colvec)) # add legend
+
+#orditorp(rda_results,display = "species",choices = c(1, 2),air =1, col = "red") # add labels to some species
+
+text(rda_results, display = "cn", cex = 1, col = "blue") # add labels to centroieds
+
+
+```
+
+
+#The position of each species point in the ordination plot is determined by the strength and direction of the relationship between that species and the environmental variables included in the analysis. 
+```{r}
+plot(rda_results,xlim = c(-2,2), 
+     ylim = c(-3,3),
+     # label the plot (title, and axes)
+     main = "Biplot RDA - scaling 2",
+     xlab = paste0("RDA1 (11.4) %"), 
+     ylab = paste0("RDA2 (4.4%)") ) # plot RDA
+
+with(rda_data_complete, points(rda_results,
+                     display = "sites", col = colvec[site_id],
+                     pch = 21, bg = colvec[site_id]),cex=0.5) # add color to the scores
+
+with(rda_data_complete, legend("bottomright", legend = levels(site_id), bty = "n",
+                       col = colvec, pch = 21, pt.bg = colvec)) # add legend
+
+#orditorp(rda_results,display = "species",choices = c(1, 2),air =1, col = "red") # add labels to some species
+
+text(rda_results, display = "species", cex = 1, col = "blue") # add labels to centroieds
+
+
+```
+###Creating complete case data for temp diff and complexity measures
+```{r}
+
+
+my_data_complete   <- my_data_complete[complete.cases(my_data_complete), ]
+colnames(my_data_complete)
+
+my_data_complete <- my_data_complete[, colSums(my_data_complete != 0) > 0]
+colnames(my_data_complete)
+species_matrix_c <- my_data_complete[,first_species:ncol(my_data_complete)]
+meta_data_c <- my_data_complete[,1:31] # columns i want to keep from my data
+helge_trans_data_c <- decostand (species_matrix_c, method = "hellinger")
+log10_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 10)
+```
+```{r}
+
+rda_results_CC <- rda(log10_trans_hel_c  ~  mean_depth * TempDiff + site +Rugosity +Curvature + season,
+                data = meta_data_c)
+
+rda_results_CC
+```
+
+
+```{r}
+ordistep(rda_results_CC ,na.action = na.omit)
+```
+```{r}
+summary (rda_results_CC)
+
+```
+
+
+###Pairwize tukey
+
+```{r}
+nmds_data<-vegdist(log10_trans_hel,method = "bray")
+
+pairwise<-betadisper(nmds_data, # the distance matrix
+                     log10_hel_my_data$site_id) # the groups
+# Reset graphics device state before opening a new PNG device
+graphics.off()
+# Open a PNG device with a larger size (e.g., 800x600 pixels)
+par(oma = c(0, 80, 0, 0))
+# Open a PNG device with a larger size
+png("tukeyhsd_plot.png", width = 800, height = 600)
+
+# Plot the TukeyHSD results with rotated y-axis labels
+par(mar=c(3,10,2,1))
+plot(TukeyHSD(pairwise), las = 1)
+
+
+
+dev.off()
+
+
+```
+
+
+```{r}
+ord  <- metaMDS(nmds_data,trace = FALSE)
+```
+
+  
+We can see the Shepard plot of the nMDS. This described the "stress", Or, how well the nMDS is doing keeping the dissimilarity between points the same.  
+ 
+
+
+*BTW - this plot is like assumption tests in models you should look at it but you don't need to present it in your final project...*
+
+Large scatter around the line suggests that original dissimilarities are not well preserved in the reduced number of dimensions. You want to keep the stress as low as possible (anything above 0.2 is suboptimal).
+
+
+Now let's check out the stress:
+
+```{r}
+ord$stress
+
+```
+
+OK, we preformed the analyses **now we can do 2 things:**
+
+**1.** Visualize our results by plotting the nMDS  
+**2.** Run statistic analyses
+
+### 1. Visualize nMDS
+
+Let's plot:
+
+```{r }
+
+plot(ord)
+
+```
+
+We can add some more information to the plot like different color for the different groups and convexhull 
+
+
+* Note - you need ro run the lines together. Either mark all of them and than press `run` or `ctrl`+`enter` or (in r markdown) use the green arrow in the upper corner named -  `run current chunk`
+
+```{r message=FALSE, warning=FALSE}
+
+ordiplot(ord, type = "n",main = paste("stress=",round(ord$stress,3))) # create the plot
+orditorp(ord, label = T, display = "sites" ,pch = 16) # add scores and color by sites
+ordihull(ord, groups = my_data$site_id, draw = "polygon",alpha = 0.35,label=F ,lty = 1,col = color6) # add convex hull
+#legend("topleft", legend = levels(my_data$depth_category), bty = "n", col = colvec, pch = 15,cex=1.1) # add legend
+
+```
+
+
+the answer is Yes - Fish communities differ by site_id.  
+
+if we want to know which survey were significantly different from one-another we can use post-hoc test and apply pair-wise comparison between the diffrent years.  
+
+```{r}
+
+pairwise<-betadisper(nmds_data, # the distance matrix
+                     my_data$season) # the groups
+
+par(mar=c(5,15,4,1))
+plot(TukeyHSD(pairwise),las=2)
+
+```
+
+#### Simper
+
+The simper functions performs pairwise comparisons of groups (i.e, `site_id`) and finds the contribution of each species to the average between-group Bray-Curtis dissimilarity.
+
+**meaning** - which species contributed to the differences found between surveys.
+
+
+```{r, results='hide'}
+simper_output<-simper(log10_trans_hel, #my community data (transformed)
+                      group = my_data$depth_category) # my group
+
+summary(simper_output)
+```
+
+
+```{r}
+listAch25<- fish_filter%>%
+  filter(site_id == "Achziv25") %>%
+  select(15) %>%
+  c(unique()
+listAch25
+
+listAch45<- fish_filter%>%
+  filter(site_id == "Achziv45") %>%
+  select(15) %>%
+  unique()
+listAch45
+uniqueAch25 <-setdiff(listAch25,listAch45)
+uniqueAch45 <-setdiff(listAch45,listAch25)
+
+
+```
+

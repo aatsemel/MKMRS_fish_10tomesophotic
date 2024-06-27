@@ -51,9 +51,8 @@ my_data$X<-NULL # remove this weird column that appear because of excel...
  my_data$site_id <- factor(my_data$site_id,ordered = T)
 my_data<-my_data%>%
   mutate(site_id_id =paste0(sample_year,season,site_id)) %>%
-  relocate(74,.after = tag) %>%
-  relocate("Algae",.after = "Sponge")  %>%
-   relocate("Bryozoan",.after = "Sponge") 
+  relocate(76,.after = tag)
+
 my_data$depth_category <- as.character(my_data$depth_category)
 #remove outlier Achziv 45 sample
 Outlier_ac4516792 <- my_data %>%
@@ -63,10 +62,11 @@ my_data = my_data[!my_data$date_id == "16792",]
 
 head(my_data)
 colnames(my_data)
+
 ```
 
 ```{r}
-first_species <- 30
+first_species <- 32
 species_matrix <- my_data[,first_species:ncol(my_data)]
 meta_data <- my_data[,1:29] # columns i want to keep from my data
 head(species_matrix)
@@ -91,13 +91,13 @@ hlge_trans_data <- decostand (species_matrix, method="hellinger")
 ```{r}
 log_trans_data <- decostand (species_matrix, method = "log",base = 10)
 helge_trans_data <- decostand (species_matrix, method = "hellinger")
-log2_trans_hel <- decostand (hlge_trans_data, method = "log",base = 2)
+log2_trans_hel <- decostand (helge_trans_data, method = "log",base = 2)
 ```
 
 **Wisconsin double standardization**: In this transformation, the abundance values are first standardized by species maximum standardization, and then by sample total standardization, and by convention multiplied by 100. Their rationalization for the subsequent sample total standardization was that not all samples had the same number of measurements, and that the stand total standardization achieved a more uniform basis for comparison.
 
 We use the `wisconsin` function:
-
+###visualizing the transformed species df
 ```{r}
 # Assuming 'df' is your data frame
 
@@ -107,12 +107,14 @@ wis_trans_data <- wisconsin(species_matrix)
 #Bar plot of the data, by site: shows species composition & total abundance
 ```{r}
  p1=barplot(t(species_matrix), main = "Raw data", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
-p2=barplot(t(hlge_trans_data), main = "Hellinger transformed Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
+p2=barplot(t(helge_trans_data), main = "Hellinger transformed Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
  p3=barplot(t(wis_trans_data), main = "Wisconsin transformation Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
  p4=barplot(t(log_trans_data), main = "Log10 transformed Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
  p5=barplot(t(log2_trans_hel), main = "Log2 and Hellinger transformed  Fish", col = rainbow(30), ylab ="Species Composition & Total Abundance", xlab ="Site (Row / Sample)")
 
 ```
+
+
 
 # PCA
 
@@ -172,7 +174,9 @@ the `scores` are basically the "coordinate" of the site in all the axes. The loc
 the `loadings`  describe the importance of the independent variables (species in our case),and provide information about which variables give the largest contribution to the components. 
 
 ```{r eval = F}
-
+# Set max.print option to display more rows
+ # Change 1000 to the desired maximum number of rows to print
+options(max.print = 2000) 
 PCA_results$scores  # the scores of each sites on each PCA axis
 PCA_results$loadings   # the loading of each species on each PCA axis
 
@@ -200,6 +204,9 @@ more PCA visualization:
 
 https://cran.r-project.org/web/packages/ggfortify/vignettes/plot_pca.html
 
+
+
+
 # RDA
 
 This is a direct ordination with a hypothesized linear response to an environmental factor.
@@ -210,85 +217,70 @@ We use direct ordinations to test whether an environmental factor is affecting o
 Ill use the log than Hellinger transformed data `helg_log_trans_data`
 
 The process is similar to modeling. We use the `rda` function and set our community (transformed) as the dependent variable ("explained"), and the environmental factors as independent variables ("predictors"). We set the full data, the one containing all the environmental factors, in the `data` argument: 
+###Creating complete case data
+```{r}
 
-```{r fig.height = 10, fig.width = 10, fig.align = "center"}
+rows_to_remove <- c(201, 203)
+
+my_data_col_comp <- my_data %>% 
+  dplyr::select(1:20) 
+my_data_col_comp <- my_data_col_comp[-rows_to_remove, ]
+
+head (my_data_col_comp)
+
+my_data_complete   <- my_data[complete.cases(my_data), ]
+first_species_c <-32
+my_data_complete <- my_data_complete[, colSums(my_data_complete != 0) > 0]
+colnames(my_data_complete)
+species_matrix_c <- my_data_complete[,first_species_c:ncol(my_data_complete)]
+meta_data_c <- my_data_complete[,1:31] # columns i want to keep from my data
+helge_trans_data_c <- decostand (species_matrix_c, method = "hellinger")
+log2_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 2)
+```
+# Normalize only numeric columns in the Metadata  using dplyr
+```{r}
+
+library(dplyr)
+
+# Assuming your data frame is named meta_data
+normalized_df <- my_data_complete %>%
+  dplyr::mutate(
+    SD_norm = scale(SD),
+    VerRelief_norm = scale(VerRelief),
+    Slope_norm = scale(Slope),
+    Curvature_norm = scale(Curvature),
+    mean_depth_norm = scale(mean_depth),
+    mean_temp_norm = scale(mean_temp),
+    LogVR_norm = scale(LogVR),
+    TempDiff_norm = scale(TempDiff),
+    Rugosity_norm = scale(Rugosity)
+  )
+
+# Print the normalized data frame
+print(normalized_df)
 
 
-rda_results <- rda(log2_trans_hel ~  site_id +season ,
-                data = my_data,
-                na.action = na.omit) 
+# Print the normalized data frame
+histogram <- ggplot(normalized_df, aes(x = TempDiff_norm)) +
+    geom_histogram( fill = "skyblue", color = "black") +
+    labs(title = "Histogram", x = "TempDiff_norm", y = "Frequency") +
+    theme_minimal()
+histogram
+```
+#my_data_complete has  fish and epibenthos data a
+```{r}
+head(normalized_df)
+# Soft.substrate was omitted because it didn't affect the model and was not significant
+
+rda_results <- rda(log2_trans_hel_c ~ lat + mean_depth+ season+ Hard.Substrate +Soft.Substrate +
+TempDiff  + Curvature+ Rugosity + Algae + reserve,
+                data = my_data_complete) 
 
 rda_results
-```
-
-
-Remember. When you see "Inertia", think "Variance". When you see "constrained" think "explained". So, in this example you can see that a proportion of 0.1121 of the inertia is explained. In words, the site_id,Site, knoll surface area and  depth affects ~10% of the all the community variance.
-
-
-now lets plot the RDA using the `plot` function.
-
-
-```{r}
-plot(rda_results,display = c("site","cn"))
-
-sc_si <- scores(rda_results, display="sites", choices=c(1,2), scaling=2)
-sc_sp <- scores(rda_results, display="species", choices=c(1,2), scaling=2)
-sc_bp <- scores(rda_results, display="bp", choices=c(1, 2), scaling=2)
-perc <- round(100*(summary(rda_results)$cont$importance[2, 1:2]), 2)
 
 ```
 
-
-useful terminology for RDA plots:  
-
-* sites = the scores (coordinates) or each row (i.e sample)    
-* species = the unconstrained variables, actual species in our case    
-* bp = bi plot, the effect of each constrained variable on the data    
-* cn = centroid of non-continues constrained variable (for example Site or season)    
-
-
-
-```{r}
-
-scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown")) #  colors according to your group
-colvec <-c("lightblue", "blue", "darkorange", "brown")
-
-plot.new()
-plot(rda_results, type="n") # plot RDA  display = "sites"
-
-with(my_data, points(rda_results
-                    , col = colvec[site_id],
-                     pch = 21, bg = colvec[site_id]),cex=0.5) # add color to the scores
-
-with(my_data, legend("bottomright", legend = levels(site_id), bty = "n",
-                       col = colvec, pch = 21, pt.bg = colvec)) # add legend
-
-orditorp(rda_results,display = "species",choices = c( 1,2),air =1, col = "black")
-#add arrows for effects of the expanatory variables
-arrows(0,0, # start them from (0,0)
-       sc_bp[,1], sc_bp[,2], # end them at the score value
-       col = "red",
-       lwd = 2)# add labels to some species
-text(x = sc_bp[,1] -0.1, # adjust text coordinate to avoid overlap with arrow tip
-     y = sc_bp[,2] - 0.03, 
-     labels = rownames(sc_bp), 
-     col = "red", 
-     cex = 1, 
-     font = 2)
-
-
-
-```
-
-here is more info on how to customized your RDA:  
-
-https://r.qcbs.ca/workshop10/book-en/redundancy-analysis.html
-
-you can see different colors names in the following link:
-
-https://www.datanovia.com/en/blog/awesome-list-of-657-r-color-names/
-
-### RDA selecting variables
+### RDA selecting variables 
 
 If you have many environmental variables you can use `ordistep` to choose which variables to include in your model.
 
@@ -297,21 +289,20 @@ In `ordistep` the criteria for including the variable is based on both significa
  
 
 ```{r}
-
-ordistep(rda_results)
-
-```
-```{r}
-
-
-rda_results2 <- rda(species_matrix ~  site_id +season + visibility  +Soft.Substrate ,
-                data = my_data,
-                na.action = na.omit) 
-
-rda_results2
-ordistep(rda_results2)
+ordistep(rda_results ,na.action = na.omit)
 ```
 
+
+Remember. When you see "Inertia", think "Variance". When you see "constrained" think "explained". So, in this example you can see that a proportion of 0.1121 of the inertia is explained. In words, the site_id,Site, knoll surface area and  depth affects ~10% of the all the community variance.
+
+
+now lets plot the RDA using the `plot` function.
+useful terminology for RDA plots:  
+
+* sites = the scores (coordinates) or each row (i.e sample)    
+* species = the unconstrained variables, actual species in our case    
+* bp = bi plot, the effect of each constrained variable on the data    
+* cn = centroid of non-continues constrained variable (for example Site or season)   
 ### RDA significance
 
 
@@ -323,9 +314,127 @@ The significance of your RDA can be tested using the function `anova.cca` which 
 
 ```{r}
 
+
+ordiplot(rda_results, scaling = 2)
+
+
+
 anova.cca(rda_results,by = "term")
 
 ```
+#The complete with temp and rugosity data rda
+```{r}
+spe.rda.signif <- rda(log2_trans_hel_c ~ lat +season+ TempDiff + Rugosity +reserve,
+                data = my_data_complete) 
+spe.rda.signif
+
+# Type 2 scaling
+ordiplot(spe.rda.signif, scaling = 2)
+```
+אין כאן סתירה? האם ההבדל בטמפ' לא קשור לעומק? האם אפשר לבנות מודל בלי הטמפרטורה אבל עם העומק?
+# One model for complete rugosity, temp_diff and mean depth  (spe.rda.signif2) another for more complete with  coverage variables (spe.rda.signif3)
+```{r}
+
+spe.rda.signif2 <- rda(log2_trans_hel_c ~season+ TempDiff + Rugosity +reserve + mean_depth,
+                data = my_data_complete) 
+spe.rda.signif2
+
+
+
+
+log2_trans_helcol_comp <-  log2_trans_hel[-rows_to_remove, ]
+
+spe.rda.signif3 <- rda(log2_trans_helcol_comp ~  Algae  + lat + depth_category+  Soft.Substrate,
+                data = my_data_col_comp) 
+spe.rda.signif3
+
+# Type 2 scaling
+ordiplot(spe.rda.signif2, scaling = 2)
+```
+```{r}
+ordistep(spe.rda.signif2 ,na.action = na.omit)
+```
+
+```{r}
+ordistep(spe.rda.signif3 ,na.action = na.omit)
+
+```
+
+
+
+
+```{r}
+colvec <-c("lightblue", "blue", "darkorange", "brown")
+scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown")) 
+plot.new()
+#plot(rda_results, type="n") # plot RDA  display = "sites"
+plot(spe.rda.signif,display = c( "species"),
+     # set scaling type 
+     #type = "none", # this excludes the plotting of any points from the results
+     frame = FALSE,
+     # set axis limits
+     xlim = c(-1,1), 
+     ylim = c(-2,2),
+     # label the plot (title, and axes)
+     main = "Biplot RDA",
+     xlab = paste0("RDA1 (", perc[1], "%)"), 
+     ylab = paste0("RDA2 (", perc[2], "%)") 
+)
+#plot(spe.rda.signif,display = c( "cn"))
+with(my_data_complete, points(spe.rda.signif
+                    , col = colvec[site_id],
+                     pch = 21, bg = colvec[site_id]),cex=0.5) # add color to the scores
+
+with(my_data_complete, legend("topright", legend = levels(site_id), bty = "n",
+                       col = colvec, pch = 21, pt.bg = colvec)) # add legend
+
+
+#The position of each species point in the ordination plot is determined by the strength and direction of the relationship between that species and the environmental variables included in the analysis. 
+```
+
+```{r}
+
+scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown")) #  colors according to your group
+colvec <-c("lightblue", "blue", "darkorange", "brown")
+
+plot.new()
+#plot(rda_results, type="n") # plot RDA  display = "sites"
+plot(spe.rda.signif,display = c( "cn","species"),
+     scaling = 2, # set scaling type 
+     #type = "none", # this excludes the plotting of any points from the results
+     frame = FALSE,
+     # set axis limits
+     xlim = c(-1,1), 
+     ylim = c(-1,1),
+     # label the plot (title, and axes)
+     main = "Biplot RDA - scaling 2",
+     xlab = paste0("RDA1 (", perc[1], "%)"), 
+     ylab = paste0("RDA2 (", perc[2], "%)") 
+)
+#plot(spe.rda.signif,display = c( "cn"))
+with(my_data_complete, points(spe.rda.signif
+                    , col = colvec[site_id],
+                     pch = 21, bg = colvec[site_id]),cex=0.5) # add color to the scores
+
+with(my_data_complete, legend("topright", legend = levels(site_id), bty = "n",
+                       col = colvec, pch = 21, pt.bg = colvec)) # add legend
+
+#orditorp(spe.rda.signif,display = "species",choices = c( 1,2),air =1, col = "black")
+
+
+```
+
+
+
+
+here is more info on how to customized your RDA:  
+
+https://r.qcbs.ca/workshop10/book-en/redundancy-analysis.html
+
+you can see different colors names in the following link:
+
+https://www.datanovia.com/en/blog/awesome-list-of-657-r-color-names/
+
 
 
 
@@ -336,7 +445,7 @@ An indirect method of ordination. It attempts to project the points on a low num
 first step (like allways) is choose data transformation. I'll use the log -> hellinger transformation I used before
 
 ```{r}
-nmds_data <- helg_log_trans_data
+nmds_data <- log2_trans_hel
 
 
 ```
@@ -436,7 +545,7 @@ We will test the effects of the environmental factors by sub-setting the origina
 
 ```{r}
 env_columns <- my_data %>% 
-  select(site_id,season, visibility , Algae ,Soft.Substrate , VerRelief , Slope , Curvature , depth_category , Sponge , Bryozoan)
+  dplyr::select(site_id, season, visibility , Algae ,Soft.Substrate , VerRelief , Slope , Curvature , depth_category , Sponge , Bryozoan)
 
 env_columns$depth_category<-as.factor(env_columns$depth_category)
 ```
@@ -468,7 +577,7 @@ After we decided what environmental variables we want to use we can test their c
 if I want to know if fish communities significantly changed along the surveys I can ask it that way:
 
 ```{r}
-adon.results <- adonis2(nmds_data ~ site_id, 
+adon.results <- adonis2(nmds_data ~ site_id*sample_year* season+reserve + Rugosity + TempDiff +depth_category , 
                         data = my_data,
                         method="bray",
                         perm=999,
@@ -490,6 +599,20 @@ pairwise<-betadisper(nmds_data, # the distance matrix
 
 par(mar=c(5,15,4,1))
 plot(TukeyHSD(pairwise),las=2)
+
+```
+###CCA  
+Start: log2_trans_hel_c ~ lat + mean_depth + season + Hard.Substrate +      Soft.Substrate + TempDiff + Curvature + Rugosity + Algae +      reserve 
+```{r}
+
+
+cca_results <- cca(log_trans_data_full ~ Year_season + Site + Surface_Area + Max_depth,
+                data = my_data,
+                na.action = na.omit) 
+
+plot(cca_results, scaling = 3)
+
+cca_results
 
 ```
 

@@ -1,0 +1,152 @@
+---
+title: "Question for Tal"
+author: "AT"
+date: "2024-05-21"
+output: html_document
+---
+
+
+### step 1 load data library etc and set wd ALL my used libraries
+
+
+```{r setup, include=FALSE}
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+#For Diversity calculations
+library(plotrix)
+library(betapart)
+library(here)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(ggpubr) 
+# Richness
+library(rareNMtests)
+library(mobr)
+here<-here::here
+
+
+```
+
+```{r}
+# Define the path to your CSV file using here()
+#csv_path <- here( "grouped.data.csv")
+
+grouped_data <- read_csv("student data/grouped.data.csv")
+# Read the CSV files
+
+#group_year_data <- read.csv(csv_path)
+
+group_year_data<-grouped_data
+
+group_year_data$...1<-NULL
+
+```
+
+###individual based rarefaction
+
+```{r message=FALSE, warning=FALSE}
+
+ind_based_rare_all<-list() # empty list
+
+for (i in 1:nrow(group_year_data)) { # for each row...
+
+one_knoll <- group_year_data[i,] # filter
+one_knoll_sp_matrix <- one_knoll[,7:ncol(one_knoll)] # create sp_matrix 6 in the first species
+
+rarefaction <- rarefaction.individual(one_knoll_sp_matrix, method = "sample-size", q = 0) # apply rarefaction function
+
+rarefaction$Year_season<-one_knoll$Year_season_id # add which year_season to the data
+rarefaction$survey_id<-one_knoll$site_id # add the survey_id to the data
+ind_based_rare_all[[i]]<- rarefaction # save in my list
+  
+}
+
+ind_based_rare_all<-bind_rows(ind_based_rare_all) # convert from list to data frame
+
+colnames(ind_based_rare_all)<-c("Individuals","Richness","Year_season","site_id") # change columns names
+
+# plot
+
+color6 = c("lightblue3", "blue2", "darkblue","yellow3", "darkorange", "brown")
+
+ggplot(ind_based_rare_all,aes(x=Individuals,y=Richness,group = site_id ,color = site_id))+
+  geom_line()
+
+IndiP <- ggplot(ind_based_rare_all,aes(x=Individuals,y= Richness,color = site_id))+geom_line(size = 1.2) + scale_color_manual(values = color6) +theme_classic() +theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) 
+IndiP
+```
+
+###Group based individual rarefaction
+
+
+
+group the data
+
+```{r}
+
+colnames (group_year_data)
+
+real_group<-group_year_data %>% dplyr::select(5,6:ncol(group_year_data))
+colnames(real_group)
+%>% 
+  group_by(site_id) %>% 
+  summarise(across(.fns = sum), .groups = "drop")
+
+
+
+```
+
+
+
+```{r}
+
+
+ind_based_rare<-list()
+
+
+for (i in unique(real_group$site_id)) {
+
+one_year<-real_group %>% filter(site_id == i)
+year_sp_matrix <- one_year[,2:ncol(one_year)]
+
+rarefaction <- rarefaction.individual(year_sp_matrix, method = "sample-size", q = 0)
+
+rarefaction$site_id<-i
+
+ind_based_rare[[i]]<- rarefaction
+  
+}
+
+ind_based_rare<-bind_rows(ind_based_rare)
+
+colnames(ind_based_rare)<-c("Individuals","Richness","site_id")
+
+ggplot(ind_based_rare,aes(x=Individuals,y=Richness,color = site_id))+
+  geom_line(size = 1.5)+ scale_color_manual(values = color6)
+
+
+```
+
+
+```{r}
+check<-real_group %>% mutate(total_abundance = rowSums(real_group[2:length(real_group)]),
+         total_rihcness = rowSums(real_group[2:length(real_group)]>0)) %>% 
+  select(site_id,total_abundance,total_rihcness)
+  
+
+```
+

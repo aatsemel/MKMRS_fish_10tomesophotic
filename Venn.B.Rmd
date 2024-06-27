@@ -1,0 +1,103 @@
+---
+title: "Venn_Meso"
+author: "AT"
+date: "2024-04-09"
+output: html_document
+---
+```{r}
+
+library(dplyr)
+library(VennDiagram)
+library(ggvenn)
+library()
+```
+
+```{r}
+species_list <- c("Sargocentron.rubrum", "Coris.julis", "Thalassoma.pavo", "Chromis.chromis", "Mycteroperca.rubra", "Epinephelus.marginatus", "Siganus.rivulatus", "Epinephelus.costae", "Parupeneus.forsskali", "Serranus.cabrilla", "Siganus.luridus", "Torquigener.flavimaculosus", "Pterois.miles", "Sparisoma.cretense", "Dasyatis.pastinaca", "Serranus.scriba", "Parablennius.rouxi", "Scarus.ghobban", "Salpa.salpa", "Gobius.bucchichi", "Saprisoma.cretense", "Cheilodipterus.novemstriatus", "Fistularia.commersonii", "Echeneis.sp", "Taeniurops.grabatus")
+
+
+checkAch25 <-setdiff(uniqueAch25,species_list)
+checkAch25
+# Print the list
+print(species_list)
+species_list_2 <- c("Pagrus.auriga", "Seriola.dumerili", "Diplodus.cervinus", "Cheilodipterus.novemstriatus", "Pagrus.caeruleostictus", "Gobius.vittatus", "Symphodus.mediterraneus", "Torquigener.flavimaculosus", "Sargocentron.rubrum", "Taeniurops.grabatus", "Argyrosomus.regius", "Diplodus.puntazzo", "Parablennius.rouxi", "Serranus.scriba", "Diplodus.vulgaris", "Scarus.ghobban", "Parupeneus.forsskali", "Sparisoma.cretense", "Diplodus.sargus", "Thalassoma.pavo", "Epinephelus.costae", "Pterois.miles", "Epinephelus.marginatus", "Sciaena.umbra", "Mycteroperca.rubra", "Serranus.cabrilla", "Coris.julis", "Chromis.chromis")
+
+# Print the list
+print(species_list_2)
+species_list_3 <- c("Coris.julis", "Chromis.chromis", "Serranus.cabrilla", "Torquigener.flavimaculosus", "Thalassoma.pavo", "Siganus.rivulatus", "Mycteroperca.rubra", "Parupeneus.forsskali", "Epinephelus.costae", "Epinephelus.marginatus", "Serranus.scriba", "Sparisoma.cretense", "Sargocentron.rubrum", "Muraena.helena", "Symphodus.mediterraneus", "Sardin.sp", "Saprisoma.cretense", "Balistes.capriscus", "Pterois.miles", "Scomberomorus.commerson", "Symphodus.tinca", "Parablennius.rouxi", "Atherinomorus.forskalii", "Diplodus.vulgaris", "Seriola.dumerili", "Siganus.luridus")
+
+# Print the list
+print(species_list_3)
+species_list_4 <- c("Chromis.chromis", "Serranus.cabrilla", "Coris.julis", "Siganus.rivulatus", "Parupeneus.forsskali", "Sardin.sp", "Pterois.miles", "Torquigener.flavimaculosus", "Sparisoma.cretense", "Mycteroperca.rubra", "Epinephelus.marginatus", "Saprisoma.cretense", "Muraena.helena", "Epinephelus.costae", "Symphodus.mediterraneus", "Thalassoma.pavo", "Symphodus.tinca", "Diplodus.vulgaris", "Synodus.saurus", "Acantholabrus.palloni", "Scomber.sp")
+
+# Print the list
+print(species_list_4)
+
+x = list(
+    Achziv_25m = species_list,
+    Achziv_45m = species_list_2,
+    SdotYam_25m = species_list_3,
+    SdotYam_45m = species_list_4
+  )
+
+Ach = list(
+    Achziv_25m = species_list,
+    Achziv_45m = species_list_2)
+SY =  list(SdotYam_25m = species_list_3,
+    SdotYam_45m = species_list_4)
+```
+```{r}
+# Identify species unique to species_list_4
+unique_species_25 <- setdiff(species_list, species_list_2)
+unique_species_25
+unique_species_45 <- setdiff(species_list_2, species_list)
+unique_species_45
+```
+
+
+```{r}
+# Combine all species lists into one
+all_species <- c(species_list, species_list_2, species_list_3, species_list_4)
+
+# Count occurrences of each species
+species_counts <- table(all_species)
+
+# Identify species unique to species_list_4
+unique_species_4 <- setdiff(species_list_4, unique(all_species))
+
+# Print the unique species
+print(unique_species_4)
+```
+
+
+
+```{r}
+ ggvenn(
+  x, 
+  fill_color = c("lightblue","#0073C2FF" , "#EFC000FF", "brown"),
+  stroke_size = 0.5, set_name_size = 4, 
+  )
+```
+```{r}
+ggvenn(
+  SY, 
+  fill_color = c("#EFC000FF", "brown"),
+  stroke_size = 1, set_name_size = 4, 
+  )
+```
+
+```{r}
+ggvenn(
+  Ach, 
+  fill_color = c("lightblue","#0073C2FF" ),
+  stroke_size = 1, set_name_size = 4, 
+  )
+```
+
+
+
+```{r}
+ #Export the plot to a file with specified dimensions
+ggsave("venn_plot.png", plot = venn_plot, width = 10, height = 10)
+```
+
