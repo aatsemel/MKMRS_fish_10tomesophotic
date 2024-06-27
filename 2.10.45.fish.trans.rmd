@@ -24,7 +24,7 @@ library (here)
 
 
 ```{r}
-fish<-all_data_clean
+fish<-sp_matrix
 ```
 
 
@@ -110,10 +110,10 @@ hist(factors3_complete$lat)
 ###nMDS : dataset creation #ENVfit The function fits environmental vectors or factors onto an ordination. The projections of points onto vectors have maximum correlation with corresponding environmental variables, and the factors show the averages of factor levels. For continuous varaibles this is equal to fitting a linear trend surface (plane in 2D) for a variable (see ordisurf); this trend surface can be presented by showing its gradient (direction of steepest increase) using an arrow. The environmental variables are the dependent variables that are explained by the ordination scores, and each dependent variable is analysed separately.
 ```{r}
 set.seed(123)
-nmds = metaMDS(hel_fish_complete, distance = "bray")
+nmds = metaMDS(sqr_hel_fish, distance = "bray")
 nmds
 #ENVfit
-colnames(factors3_complete)
+colnames(meta_data)
 factors_analy<-subset(factors3_complete,select=c(4, 7,16,19,22 ))
 fit <- envfit(nmds, factors_analy, perm = 999, na.rm = TRUE )
 # vegan::scores(fit, "vectors")

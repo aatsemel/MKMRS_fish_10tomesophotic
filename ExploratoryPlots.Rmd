@@ -1,0 +1,188 @@
+---
+title: "Plots from step1"
+author: "AT"
+date: "2024-05-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+###Plotting
+
+```{r}
+out_F_data <-filter(DepthFishdataFact, tag !="Achziv254Spring2017")
+ggplot(data = out_F_data,aes(x = Curvature, y = - mean_depth, color = site, ))+
+  geom_point() +ylab("Depth (m)") +xlab("Curvature") +theme_classic() 
+  #geom_label(aes(label = tag), hjust = .8, vjust = -.5) #+ scale_x_continuous(limits = c(1, 1.2)) 
+
+```
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = LogVR, y = - mean_depth, color = site))+
+  geom_point() +ylab("Depth (m)") +xlab("Log(Vertical Relief)") +theme_classic()  
+```
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = Algae, y = - mean_depth, color = site))+
+  geom_point() +ylab("Depth (m)") +xlab("Algae relative abundance") + theme_classic()
+```
+
+
+```{r}
+ggplot(data = DepthFishdataFact,aes(x = Soft.Substrate, y = - depth_category, color = season))+
+  geom_jitter() +ylab("Depth (m)") +xlab("Soft substrate relative abundance")+ facet_wrap(~ site_id)+
+    theme_classic()
+```
+
+```{r}
+# lets plot it for all sites:
+DepthFishdataFactfilt <-DepthFishdataFact %>%
+dplyr::filter(season == "Fall")
+  p <- ggplot(data =DepthFishdataFactfilt,aes(x = season,y= TempDiff,group = depth_category,color = as.factor(season)))+
+    geom_point()+
+  facet_wrap(~ site_id) +
+  theme_classic() + ylab("Difference in temperature (degC) from shallower site")
+ p + theme(text = element_text(size = 14),
+          strip.text = element_text(size = 14))
+ 
+
+ 
+```
+
+##plotting the relationship between species and individuals number:
+```{r}
+ggplot(data=fish_wide,
+       aes(x=log2(n_ind_sample),
+           y=n_species_sample,
+           color = season))+
+        xlab("Log2(Abundance)")+
+       ylab("Number of species")+
+      ggtitle("Relationship between abundance and species")+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~ site_id) +theme_classic()  +scale_color_discrete("Season")
+```
+
+
+```{r}
+# Define breaks for the histogram with each bin twice the value of the preceding one
+custom_breaks <- 2^(0:10)
+fish_wide %>%
+   ggplot(aes( x= log2(n_ind_sample),   y = n_species_sample, color= season))+ geom_col(breaks = custom_breaks)+
+        xlab("log2(Abundance) at 10 m depth sites")+
+       ylab("No. of species")+ theme_classic() + scale_y_continuous(limits = c(0, 30))
+```
+```{r}
+# Example bxpT
+bxpT <- ggplot(my_data, aes(x = site_id, y = LogVR)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Log(Vertical Relief)")
+
+# Set y-axis limits without truncating data points
+bxpT <- bxpT + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpT)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpT <- bxpT     + labs(x = NULL)   # 
+bxpT
+```
+
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpS <- ggplot(my_data, aes(x = site_id, y = Rugosity)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Rugosity")
+
+# Set y-axis limits without truncating data points
+#bxpS <- bxpS + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpS)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpS <- bxpS     + labs(x = NULL)   # 
+bxpS
+```
+
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpH <- ggplot(my_data, aes(x = site_id, y = Slope)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Slope")
+
+# Set y-axis limits without truncating data points
+#bxpH <- bxpH + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpH)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpH <- bxpH     + labs(x = NULL)   # 
+bxpH
+```
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpC <- ggplot(my_data, aes(x = site_id, y = Curvature)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Curvature")
+
+# Set y-axis limits without truncating data points
+#bxpC <- bxpC + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpC)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpC <- bxpC     + labs(x = NULL)   # 
+bxpC
+```
+### ANOVA testing
+```{r}
+# Convert depth_category to factor for correct analysis
+my_data$depth_category <- as.factor(my_data$depth_category)
+# my_data_sy <-my_data %>%
+#   filter(site == "SdotYam")
+
+
+# Perform two-way ANOVA for SY
+anova_result <- aov(LogVR ~ site * depth_category , data = my_data)
+summary(anova_result)
+```
+
+
+```{r}
+library(ggpubr)
+# Set a common x-axis titlec ommon.legend = TRUE,  common.xlabel = "N" )
+tiff("Habitat heterogeneity indices.jpeg", units="in", width=7, height=6, res=600)
+diversPlots <- ggarrange( bxpT, bxpS, bxpH, bxpC, 
+          labels = c("       a ", "      b ", "       c ", "      d   "),
+          ncol = 2, nrow = 2)   # Set a common x-axis title)
+diversPlots
+dev.off()
+diversPlots
+
+```

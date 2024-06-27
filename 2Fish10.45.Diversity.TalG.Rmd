@@ -22,7 +22,7 @@ colnames(my_data)
 my_data$site_id <- factor(my_data$site_id,ordered = T)
 my_data<-my_data%>%
   mutate(Year_season_id =paste0(sample_year,season,site_id)) %>%
-  relocate(81,.after = tag) 
+  relocate(74,.after = tag) 
 head(my_data)
 
 species_dist<- my_data %>% select ( "Epinephelus.marginatus" , "Mycteroperca.rubra" ,"Siganus.luridus" ,   "Epinephelus.costae" ,  "Siganus.rivulatus")
@@ -204,6 +204,22 @@ ggplot( data = renyi_df ) +
    scale_x_continuous(limits = c(0,10)) + scale_y_continuous(limits = c(0,13)) +facet_wrap(.~site_id) +
          labs(y = expression("Diversity  D(p) "^"Q")) +theme_classic()
 
+ggplot(data = renyi_df) +
+  aes(x = Q, y = Value, group = tag, color = factor(site_id)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 10)) +
+  scale_y_continuous(limits = c(0, 13)) +
+  facet_wrap(. ~ site_id) +
+  labs(y = expression("Diversity  D(p) "^"Q")) +
+  theme_classic() +
+  theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) +
+  scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown"))  # Specify color palette
+
+
+
 ```
 
 
@@ -211,7 +227,7 @@ ggplot( data = renyi_df ) +
 ```{r}
 colnames(my_data)
 group_year_data <- my_data %>% 
-  dplyr::select(sample_date, Year_season_id, site_id, depth_category, season, 28:81) %>% 
+  dplyr::select(sample_date, Year_season_id, site_id, depth_category, season, 30:74) %>% 
   dplyr::group_by(sample_date, site_id,depth_category, season,Year_season_id) %>% # use this unit for analyses
   dplyr::summarise(across(Acantholabrus.palloni:Torquigener.flavimaculosus, sum),.groups = "keep")
 head(group_year_data)
@@ -239,10 +255,11 @@ head(renyi_df_group)
 ```
 
 ```{r}
-ggplot(renyi_df_group,aes(x=Q, y=Value, group = Year_season_id, color= season))+ 
+ggplot(renyi_df_group,aes(x=Q, y=Value, group = Year_season_id, color= site_id))+ 
   geom_line()+
-  scale_x_continuous(limits = c(0,15))+facet_grid (~  depth_category + season )+ theme_classic() +
-         labs(y = expression("Diversity  D(p) "^"Q"))
+  scale_x_continuous(limits = c(0,15))+facet_grid (~    site_id +depth_category)+ theme_classic() +
+         labs(y = expression("Diversity  D(p) "^"Q"))+
+  scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown"))  # Specify color palette
 ```
 #clean my environment so it will be less clutter and messy… this is the line that remove all object (except my_data and first_species) from my environment:
 ```{r}
@@ -299,7 +316,8 @@ ggplot(bray_scores_site,aes(x = Site,
                        color = Site)) +
   geom_point(size = 4)+
   geom_errorbar(aes(ymin= mean_bray - se_bray,
-                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +ylab(" Bray-Curtis dissimilarity")
+                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +ylab(" Bray-Curtis dissimilarity")+
+  scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown"))  # Specify color palette
 
 
 ```

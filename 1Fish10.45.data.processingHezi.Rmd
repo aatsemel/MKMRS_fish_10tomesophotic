@@ -1,14 +1,15 @@
 ---
-title: "Data processing for chapter 3: 10-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+title: "Data processing for chapter 3: 25-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
 output: html_document
 date: "2022-11-10"
 preparing 3 data sets and combined data sets:
- A. Fish_abund df 
- C. factors3 df
- D. Fish_Inv_fact combined by "tag" df 
+WHEN UPDATING A NEW FISH_SURVEY FILE- CORRECT VIVIBILITY TO 7 AT AchzivR453Spring2020
+AchzivR454Spring2020
+
 ---
 
 ### step 1 load data library etc and set wd
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -31,6 +32,10 @@ library(here)
 
 here<-here::here
 
+
+```
+
+```{r}
 # Define the path to your CSV file using here()
 csv_path <- here("data", "fishsurvey_sub2022.csv")
 csv_path1 <- here("data", "monitoring_sites.csv")
@@ -39,8 +44,9 @@ csv_path1 <- here("data", "monitoring_sites.csv")
 
 fish_data <- read.csv(csv_path)
 sites <- read.csv(csv_path1)
-complex.inic <- read.csv(here("Data", "HOBO_compl_45.csv"))
-
+complex.inic <-read_delim("Data/EnvVar10_45.csv", 
+   delim = "\t", escape_double = FALSE, 
+  trim_ws = TRUE)
 
 fish_data <-merge(fish_data,sites, by= "site_id") 
 
@@ -54,6 +60,7 @@ fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,seaso
 
 head(fish_data)
 ```
+
 ###QA
 ```{r}
 
@@ -80,7 +87,8 @@ fish_filter <-   fish_filter%>%
   filter(species != "Epinephelus sp") %>%
   filter(species != "Siganus sp") %>%
    filter(species != "Dasyatis.sp" ) %>%
-  filter(species != "Empty transect")
+  filter(species != "Empty transect") %>%
+  filter(depth_category >10)
 fish_filter$reserve <- ifelse(fish_filter$site == "Achziv", # if the month is Achziv
                          "R", # if its true write R
                          "N") # if its false write Fall
@@ -91,9 +99,9 @@ head(fish_filter)
 ```{r}
 
 fish_long <- fish_filter %>%
- select(-transect,-a_b,-habitat, -depth, -factor_visibility, -observer, -size,-distance) %>%
- relocate(species,.after = tag) %>%
-  mutate( occ =1 ) %>% 
+  dplyr::select(-transect,-a_b,-habitat, -depth, -factor_visibility, -observer, -size,-distance) %>%
+  dplyr::relocate(species,.after = tag) %>%
+   dplyr::mutate( occ =1 ) %>% 
  dplyr::group_by(across(site_id:species)) %>% 
  dplyr::summarise(total_ind = sum(occ))
 ```
@@ -134,7 +142,7 @@ colnames(fish_wide)
 ###Lets remove taxa in the genus 
 ```{r}
 fish_wide<- fish_wide %>%
-  select(-"Dasyatis sp", -"Gobius sp", -"Symphodus sp")
+   dplyr::select(-"Dasyatis sp", -"Gobius sp", -"Symphodus sp")
 ```
 ###Creating Spring and Fall datasets
 
@@ -171,12 +179,12 @@ Inv.Grp.data<- Inv.Grp.data %>% mutate (tag= paste0(site
 head(Inv.Grp.data)
 
 colnames(Inv.Grp.data)
-Inv.Grp.factors <-select(Inv.Grp.data,Algae,Bryozoan,Hard.Substrate, Hydrozoa, Soft.Substrate,Sponge,tag, 11:19)
+Inv.Grp.factors <- dplyr::select(Inv.Grp.data,Algae,Bryozoan,Hard.Substrate, Hydrozoa, Soft.Substrate,Sponge,tag, 11:19)
 
 head(Inv.Grp.factors)
 
 Inv.Grp.factors <-as.data.frame(Inv.Grp.factors)
-DepthFishdataINv <-select(Inv.Grp.factors, 1:7)
+DepthFishdataINv <- dplyr::select(Inv.Grp.factors, 1:7)
 
 
 
@@ -188,12 +196,27 @@ DepthFishdataINv <-select(Inv.Grp.factors, 1:7)
 
 DepthFishdataFact <-left_join(fish_wide, DepthFishdataINv, by = "tag")
 DepthFishdataFact <-left_join(DepthFishdataFact, complex.inic, by = "tag")
-head(DepthFishdataFact)
+
+colnames(DepthFishdataFact)
 DepthFishdataFact <-DepthFishdataFact %>%
-  relocate(65:78,.after = tag) 
+  relocate(61:76,.after = tag) 
 head(DepthFishdataFact)
-DepthFishdataFact<- subset(DepthFishdataFact, select = -c(X) )
+DepthFishdataFact<- subset(DepthFishdataFact,  dplyr::select = -c(X) )
+
+
+```
+```{r}
+# Assuming your dataframe is named 'DepthFishdataFact'
+
+
+checktag<-dplyr::select(DepthFishdataFact,4,20,13)
+view(checktag)
+# Update sample_date.x column where sample_date.y is not NA and is different
+DepthFishdataFact$sample_date.x[!is.na(DepthFishdataFact$sample_date.y) & DepthFishdataFact$sample_date.y != DepthFishdataFact$sample_date.x] <- DepthFishdataFact$sample_date.y[!is.na(DepthFishdataFact$sample_date.y) & DepthFishdataFact$sample_date.y != DepthFishdataFact$sample_date.x]
+# Print the updated dataframe to verify the changes
+print(DepthFishdataFact)
 write.csv(DepthFishdataFact, here("R.generated.Data","Fish.FactorsGrp.wis.csv"))
+
 ```
 
 ###Plotting
@@ -250,8 +273,7 @@ ggplot(data=fish_wide,
 # Define breaks for the histogram with each bin twice the value of the preceding one
 custom_breaks <- 2^(0:10)
 fish_wide %>%
-  filter(depth_category== 10)%>%
-  ggplot(aes( x= log2(n_ind_sample),   y = n_species_sample, color= season))+ geom_col(breaks = custom_breaks)+
+   ggplot(aes( x= log2(n_ind_sample),   y = n_species_sample, color= season))+ geom_col(breaks = custom_breaks)+
         xlab("log2(Abundance) at 10 m depth sites")+
        ylab("No. of species")+ theme_classic() + scale_y_continuous(limits = c(0, 30))
 ```

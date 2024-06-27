@@ -1,0 +1,105 @@
+---
+title: "SharkTemp"
+author: "AT"
+date: "2024-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(dplyr)
+library(here)
+library(zoo)
+library(ggplot2)
+Temp<- read_csv("Data/Temp/TBRSensorDataFilteredAnat30.4.24.csv") # receiver temperature data of this producer and model https://www.thelmabiotel.com/receivers/tbr-700/
+
+
+head(Temp)
+
+
+
+
+# Calculate 1-hour moving median for each Site_id
+Temp <- Temp %>%
+  arrange(site_id, Date.and.Time.UTC) %>%
+  group_by(site_id) %>%
+  mutate(Moving_Median = rollapply(Temperature.degC, width = 60, FUN = median, align = "right", fill = NA))
+
+
+```
+
+# Create scatter plot
+
+
+```{r}
+# Create scatter plot with moving median line
+ggplot(Temp, aes(x = Date.and.Time.UTC, y = Moving_Median, color = as.factor(site_id))) +
+  geom_line() +   # Add moving median line
+  labs(x = "Date and Time (UTC)", y = "Temperature (°C)", color = "Site ID") +  # Label axes
+  theme_minimal()  # Use a minimalistic theme
+
+```
+```{r}
+# Create box plot
+
+
+ggplot(Temp, aes(x = cut(Date.and.Time.UTC, breaks = "2 weeks"), y = Temperature.degC, fill = as.factor(site_id))) +
+  geom_boxplot() +  # Add box plots
+  labs(x = "Date Range", y = "Temperature (°C)", fill = "Site ID") +  # Label axes and legend
+  theme_minimal() +  # Use a minimalistic theme
+   scale_x_discrete(labels = function(x) {
+    formatted_dates <- as.Date(x, format = "%Y-%m-%d")
+    format(formatted_dates, "%b %d", lang = "en")  # Display only month and day in English
+  })  # Format x-axis labels to show date range in English
+
+```
+```{r}
+# Assuming your dataset is named 'df'
+# Ensure Date.and.Time.UTC is in Date/Time format and site_id is a factor
+
+# Load necessary library if not already loaded
+# install.packages("dplyr")  # Uncomment and run if you haven't installed dplyr
+library(dplyr)
+
+# Example dataset (replace with your actual dataset)
+# df <- read.csv("your_dataset.csv")
+
+# Convert Date.and.Time.UTC to POSIXct format if it's not already
+df$Date.and.Time.UTC <- as.POSIXct(df$Date.and.Time.UTC)
+
+# Ensure site_id is treated as a factor
+Temp$site_id <- as.factor(Temp$site_id)
+
+# Group by Date.and.Time.UTC
+grouped_data <- Temp %>%
+  dplyr::group_by(Date.time)%>%
+  dplyr::filter(n_distinct(site_id) == 2)
+library(tidyr)
+pivot_df <- grouped_data %>%
+  pivot_wider(names_from = site_id, values_from = Temperature.degC)
+
+# Extract the lists for each site_id
+Achziv <- pivot_df$Achziv
+SdotYam <- pivot_df$SdotYam
+
+# Now you can perform a paired t-test between Achziv and SdotYam
+result <- t.test(Achziv, SdotYam, paired = TRUE)
+
+# Print the t-test result
+print(result)
+}
+
+# Apply the function to each valid group and store results in a list
+t_test_results <- lapply(split(valid_groups, seq(nrow(valid_groups))), perform_t_test)
+
+# Extract and print results (you can modify how you want to store or present results)
+for (i in seq_along(t_test_results)) {
+  time_point <- valid_groups$Date.and.Time.UTC[i]
+  cat("Time point:", time_point, "\n")
+  cat("T-test results:\n")
+  print(t_test_results[[i]])
+  cat("\n")
+}
+
+```
+

@@ -39,7 +39,8 @@ my_data$X<-NULL # remove this weird column that appear because of excel...
  my_data$site_id <- factor(my_data$site_id,ordered = T)
 my_data<-my_data%>%
   mutate(Year_season_id =paste0(sample_year,season,site_id)) %>%
-  relocate(78,.after = tag) 
+  filter(depth_category >10)%>%
+  relocate(76,.after = tag) 
 head(my_data)
 colnames(my_data)
 save(my_data, file = "my_data.RData" )
@@ -50,9 +51,9 @@ Ok, let's start!
 First of all, This a plot with the mean (±SE) richness in each Survey, What is wrong with this plot?
 # species and metadata mtrices
 ```{r}
-first_species <- 30
+first_species <- 32
 sp_matrix <- my_data[,first_species:ncol(my_data)]
-meta_data <- my_data[,1:29] # columns i want to keep from my data
+meta_data <- my_data[,1:31] # columns i want to keep from my data
 
 # plot the mean richness at each year of surveying
 
@@ -176,7 +177,7 @@ Now we will sum the total individuals of each species in each `Year_season`.
 
 ```{r}
 group_data <- my_data %>% 
-  dplyr::select(sample_date, Year_season_id, site_id, depth_category, season, 30:78) %>% 
+  dplyr::select(sample_date, Year_season_id, site_id, depth_category, season, 32:76) %>% 
     dplyr::group_by(sample_date, site_id,depth_category, season,Year_season_id) %>% # use this unit for analyses
     dplyr::summarise(across(Acantholabrus.palloni:Torquigener.flavimaculosus, sum),.groups = "keep")
 head(group_data)
@@ -197,7 +198,7 @@ The result is a much shorter dataset, where each row is the sum abundance of eac
 
 
 
-Now we will rarefy by sample.  #sample rarefaction reduces the effect of scholing species
+Now we will rarefy by sample.  #sample rarefaction reduces the effect of schooling species
 
 When we use Sample-based rarefaction we summing up the number of new species that added with each new sample and ignoring the number of individuals belonging to each species. Therefore we neutralize the effect of large schools (herds/flocks etc.) on the rarefaction curve shape.    
 
@@ -216,7 +217,7 @@ for (i in unique(my_data$site_id)) {
 one_year<-my_data %>% filter(site_id == i)
 year_sp_matrix <- one_year[,first_species:ncol(one_year)]
 
-rarefaction <- rarefaction.sample(year_sp_matrix, method = "sample-size", q = 1)
+rarefaction <- rarefaction.sample(year_sp_matrix, method = "sample-size", q = 2)
 
 rarefaction$Year_month<-i
 
@@ -226,14 +227,17 @@ sample_based_rare[[i]]<- rarefaction
 
 sample_based_rare<-bind_rows(sample_based_rare)
 
-colnames(sample_based_rare)<-c("Samples","Shannon","Site.id")
-colvec <- c("yellow" ,"darkgoldenrod1","darkgoldenrod", "cadetblue1", "aquamarine2","royalblue") #  colors according to your group
+colnames(sample_based_rare)<-c("Samples","True.diversity","Site.id")
+colvec <- c("lightblue", "blue", "darkorange", "brown") #  colors according to your group
 
-ggplot(sample_based_rare,aes(x=Samples,y=Shannon,color = Site.id))+geom_line(size = 1.2) + scale_color_manual(values = colvec) +theme_classic()
+ggplot(sample_based_rare,aes(x=Samples,y= True.diversity,color = Site.id))+geom_line(size = 1.2) + scale_color_manual(values = colvec) +theme_classic() +theme(
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 12)  # Enlarge legend text
+  ) 
 
 
 ```
-###individual basaed rarefaction
+###individual based rarefaction
 
 ```{r}
 
@@ -273,7 +277,7 @@ The first step is to calculate how many individual you have in each sample. In m
 
 mean_density<-my_data
 
-mean_density$sum_ind<-rowSums(mean_density[30:ncol(mean_density)]) 
+mean_density$sum_ind<-rowSums(mean_density[32:ncol(mean_density)]) 
 
 ```
 
@@ -311,7 +315,7 @@ When correcting to the number of individuals sampled we get a different picture!
 
 check the paper *Quantifying biodiversity: procedures and pitfalls in the measurement and comparison of species richness* by Gotelli & Colwell for more information.  
 
-## Shannon-Winner Rarefaction Curves
+## Shannon-Wienner Rarefaction Curves
 
 In addition to compering richness among surveys, we can also compare different diversity indexes such as the effective number of species according to Shannon-Winner index (which give less weight to rare species).  
 
@@ -334,11 +338,11 @@ ind_based_rare2[[i]]<- rarefaction2
 
 ind_based_rare1<-bind_rows(ind_based_rare2)
 
-colnames(ind_based_rare1)<-c("Individuals","Effective number of species","Site_id")
+colnames(ind_based_rare1)<-c("Samples","Shannon","Site_id")
 
 
-ggplot(ind_based_rare1,aes(x=Individuals,y="Effective number of species",color = Site_id))+
-  geom_line(size = 1.5)+ theme_classic() +scale_color_manual(values  = colvec)
+ggplot(ind_based_rare1,aes(x=Samples,y=Shannon,color = Site_id))+
+  geom_line(size = 1.5)+ theme_classic() +scale_color_manual(values  = colvec)+ labs(y = "Effective number of species")
 ```
 
 

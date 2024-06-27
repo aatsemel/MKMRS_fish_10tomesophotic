@@ -28,7 +28,7 @@ library(here)
 here<-here::here
 ###Hobo data was converted from KPa to depths as follows: depths  = (Kpa-101.325)/10
 HOBO_data <- read.csv(here("Data","10_25_45mAch_SY_Hobo_clean.csv"))
-HOBO_data <-select(HOBO_data, -X)
+HOBO_data <-dplyr::select(HOBO_data, -X)
 head(HOBO_data)
 
 
@@ -125,18 +125,33 @@ curvature_fun = function(depths)  {
 
 ```{r}
 head(HOBO_data)
-HOBO_data_tag<- HOBO_data %>% mutate (tag= paste0(site,depth,Transect,season,sample_year))
-HOBO_compl_indic_tag <- HOBO_data_tag %>%
-  group_by(tag) %>%
-  summarize( Rugosity = rugosity_fun(depths,distance = 25),
+HOBO_compl_indic_data_log<- HOBO_data %>% dplyr::mutate (tag= paste0(site,depth,Transect,season,sample_year))
+library(lubridate)
+
+# Define additional date-time formats
+additional_formats <- c("%d/%m/%Y %H:%M", "%d/%m/%Y")
+
+# Parse sample_date column
+HOBO_compl_indic_data_log$sample_date <- parse_date_time(HOBO_compl_indic_data_log$date, orders = c("%d/%m/%Y %H:%M", "%d/%m/%Y"))
+
+# Extract only the date component
+HOBO_compl_indic_data_log$sample_date <- as.Date(HOBO_compl_indic_data_log$sample_date)
+
+# Print the dataframe to verify the changes
+colnames(HOBO_compl_indic_data_log)
+HOBO_compl_indic_data_log<- HOBO_compl_indic_data_log %>%
+  dplyr::group_by(tag) %>%
+  dplyr::summarize( Rugosity = rugosity_fun(depths,distance = 25),
             SD = sd_fun(depths),
             VerRelief = vr_fun(depths),
             Slope = slope_fun(depths),
             Curvature = curvature_fun(depths),
-            mean_depth = mean(depths))
-View(HOBO_compl_indic_tag)
-HOBO_compl_indic_data_log <-HOBO_compl_indic_tag %>%
+            mean_depth = mean(depths),
+            mean_temp =  mean(TempC))
+
+HOBO_compl_indic_data_log <-HOBO_compl_indic_data_log %>%
   mutate( "LogVR" = log(VerRelief))
+
 head(HOBO_compl_indic_data_log)
 
 
@@ -148,12 +163,12 @@ write.csv(HOBO_compl_indic_data_log, file = output_path1)
 ###Checking length distributions in the 2 library(ggrepel)
 
 ```{r}
-HOBO_length_tag <- HOBO_data_tag %>%
-  group_by(tag) %>%
-  summarize(site,length(depths)) %>%
+HOBO_length_tag <- HOBO_compl_indic_data_log %>%
+  dplyr::group_by(tag) %>%
+  dplyr::summarize(site,length(depths)) %>%
   unique()%>%
   ungroup("length(depths)") %>%
-  rename(l_d = "length(depths)")
+  dplyr::rename(l_d = "length(depths)")
 head(HOBO_length_tag)
 #ggplot(HOBO_length_tag, aes(x = length(depth),y = factor(site), fill = site)) +
   # geom_density_ridges(stat = "binline", bins = 10, scale = .9,

@@ -14,7 +14,7 @@ library("here")
 ```
 
 ```{r}
-fish<- read.csv(here("R.generated.Data", "Fish.Long_45.csv"))
+fish<- read.csv(here("Data", "fishsurvey_sub2022.csv"))
 
 
 fishes <-as.list(c(unique(fish$species) ))
@@ -22,6 +22,7 @@ fishes <-as.list(c(unique(fish$species) ))
 values_to_exclude   <- as.list(c("Epinephelus sp", "Gobius sp","Dasyatis sp","Symphodus sp","Echeneis sp","Siganus sp","Sardin sp","Scomber sp"))
 fishes_filtered <-setdiff(fishes, values_to_exclude)
 fishes_filtered <-as.data.frame(fishes_filtered)
+fishes_filtered$X.Salpa.salpa. <- sub("Salpa salpa", "Sarpa salpa", fishes_filtered$X.Salpa.salpa.)
 ```
 ###Looping through a and b #in unique(fish$species)
 ```{r}

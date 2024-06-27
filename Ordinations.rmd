@@ -51,13 +51,14 @@ my_data$X<-NULL # remove this weird column that appear because of excel...
  my_data$site_id <- factor(my_data$site_id,ordered = T)
 my_data<-my_data%>%
   mutate(site_id_id =paste0(sample_year,season,site_id)) %>%
-  relocate(81,.after = tag) %>%
+  relocate(74,.after = tag) %>%
   relocate("Algae",.after = "Sponge")  %>%
    relocate("Bryozoan",.after = "Sponge") 
 my_data$depth_category <- as.character(my_data$depth_category)
 #remove outlier Achziv 45 sample
 Outlier_ac4516792 <- my_data %>%
-  filter(date_id == "16792")
+  filter(date_id == "16792") %>%
+   filter(depth_category >10)
 my_data = my_data[!my_data$date_id == "16792",]
 
 head(my_data)
@@ -89,6 +90,7 @@ hlge_trans_data <- decostand (species_matrix, method="hellinger")
 
 ```{r}
 log_trans_data <- decostand (species_matrix, method = "log",base = 10)
+helge_trans_data <- decostand (species_matrix, method = "hellinger")
 log2_trans_hel <- decostand (hlge_trans_data, method = "log",base = 2)
 ```
 
@@ -132,12 +134,22 @@ We are now ready to perform the PCA. We will first show the un-transformed data:
 ```{r fig.height = 10, fig.width = 10, fig.align = "center", warning = FALSE, message= FALSE}
 
 
-PCA_results <- princomp(species_matrix, scores = T)
+PCA_results <- princomp(log2_trans_hel, scores = T)
 
 
-autoplot(PCA_results,loadings = TRUE,loadings.label = TRUE,
+autoplot(PCA_results, loadings = TRUE, loadings.label = TRUE,
          data = my_data,
-         colour = 'site_id') 
+         colour = 'site_id', size = 2) +
+  theme(
+    text = element_text(size = 16), 
+    legend.title = element_blank(), 
+    legend.text = element_text(size = 16),
+    panel.background = element_blank(),  # Remove background
+    panel.grid.major = element_blank(),   # Remove grid lines
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")  # Color axis lines
+  ) +
+  scale_color_manual(values = c("lightblue4", "blue", "darkorange", "brown")) 
 
 ```
 
@@ -177,39 +189,8 @@ lets see how its look in the data:
  
 
 
-## PCA after data transformation 
-
-Ok, so we understood why we might want to use transformations on our data. let's perform first the log-transformation on the data give more weight for the rare species over the common one and then the Hellinger transformation to  deal with many 0 and rare species in my data and rerun the analysis. 
-
-
-```{r fig.height = 10, fig.width = 10, fig.align = "center", warning = FALSE, message= FALSE}
-
-log_trans_data <- decostand(species_matrix, method = "log",base = 10) 
-
-helg_log_trans_data <- decostand(log_trans_data, method = "hellinger") # do hellinger on the log-transformed data  
-PCA_helg_log_results <- princomp(helg_log_trans_data, scores = T)
-# PCA_helg_log_results$depth_category<-as.factor(PCA_helg_log_results$depth_category)
-  # run the PCA analyses
-
-
-autoplot(PCA_helg_log_results,
-         loadings = TRUE,
-         loadings.label = TRUE,
-         loadings.colour = 'black',
-         loadings.label.colour = "black", 
-         data = my_data,
-         colour = 'depth_category', font_size = 14) +theme_classic()
-
-```
-
 and the data behind...
 
-  
-```{r eval = F}
-summary(PCA_helg_log_results) #  Importance of components
-PCA_helg_log_results$scores  # the scores of each sites on each PCA axis 
-PCA_helg_log_results$loadings   #the loading of each species on each PCA axis
-```
 
 
 You can see how transformation affected the results.
@@ -233,7 +214,7 @@ The process is similar to modeling. We use the `rda` function and set our commun
 ```{r fig.height = 10, fig.width = 10, fig.align = "center"}
 
 
-rda_results <- rda(helg_log_trans_data ~  site_id +season + visibility + Algae +Soft.Substrate + VerRelief + Slope + Curvature + mean_depth + Sponge + Bryozoan  ,
+rda_results <- rda(log2_trans_hel ~  site_id +season ,
                 data = my_data,
                 na.action = na.omit) 
 
@@ -250,6 +231,11 @@ now lets plot the RDA using the `plot` function.
 ```{r}
 plot(rda_results,display = c("site","cn"))
 
+sc_si <- scores(rda_results, display="sites", choices=c(1,2), scaling=2)
+sc_sp <- scores(rda_results, display="species", choices=c(1,2), scaling=2)
+sc_bp <- scores(rda_results, display="bp", choices=c(1, 2), scaling=2)
+perc <- round(100*(summary(rda_results)$cont$importance[2, 1:2]), 2)
+
 ```
 
 
@@ -264,11 +250,11 @@ useful terminology for RDA plots:
 
 ```{r}
 
-colvec <- c("yellow" ,"darkgoldenrod1","darkgoldenrod", "cadetblue1", "aquamarine2","royalblue") #  colors according to your group
-
+scale_color_manual(values = c("lightblue", "blue", "darkorange", "brown")) #  colors according to your group
+colvec <-c("lightblue", "blue", "darkorange", "brown")
 
 plot.new()
-plot(rda_results) # plot RDA  display = "sites"
+plot(rda_results, type="n") # plot RDA  display = "sites"
 
 with(my_data, points(rda_results
                     , col = colvec[site_id],
@@ -277,9 +263,18 @@ with(my_data, points(rda_results
 with(my_data, legend("bottomright", legend = levels(site_id), bty = "n",
                        col = colvec, pch = 21, pt.bg = colvec)) # add legend
 
-orditorp(rda_results,display = "species",choices = c( 1,2),air =1, col = "red") # add labels to some species
-
-text(rda_results, display = "cn", cex = 1, col = "blue") # add labels to centroieds
+orditorp(rda_results,display = "species",choices = c( 1,2),air =1, col = "black")
+#add arrows for effects of the expanatory variables
+arrows(0,0, # start them from (0,0)
+       sc_bp[,1], sc_bp[,2], # end them at the score value
+       col = "red",
+       lwd = 2)# add labels to some species
+text(x = sc_bp[,1] -0.1, # adjust text coordinate to avoid overlap with arrow tip
+     y = sc_bp[,2] - 0.03, 
+     labels = rownames(sc_bp), 
+     col = "red", 
+     cex = 1, 
+     font = 2)
 
 
 
@@ -309,11 +304,12 @@ ordistep(rda_results)
 ```{r}
 
 
-rda_results2 <- rda(helg_log_trans_data ~  site_id +season + visibility  +Soft.Substrate ,
+rda_results2 <- rda(species_matrix ~  site_id +season + visibility  +Soft.Substrate ,
                 data = my_data,
                 na.action = na.omit) 
 
 rda_results2
+ordistep(rda_results2)
 ```
 
 ### RDA significance
@@ -327,7 +323,7 @@ The significance of your RDA can be tested using the function `anova.cca` which 
 
 ```{r}
 
-anova.cca(rda_results2,by = "term")
+anova.cca(rda_results,by = "term")
 
 ```
 

@@ -1,0 +1,91 @@
+---
+title: "Untitled"
+author: "AT"
+date: "2024-03-21"
+output: EnvVar10_45.csv
+Temperature differences between depth strata was calculated in Excel
+---
+
+```{r Libraries,echo=T,warning=F,message=F}
+
+library(tidyr)
+library(dplyr)
+
+library(ggplot2)
+library(ggpubr)
+library(here)
+
+
+
+```
+
+```{r}
+# Set the directory where your CSV files are located
+# Set the directory where your CSV files are located
+folder_path <- "C:/Users/atsemel/Documents/Anats/MKMRSfish10tomesophotic/Data/HOBO/45m sites"
+
+# Get a list of all CSV files in the folder
+csv_files <- list.files(path = folder_path, pattern = "\\.csv$", full.names = TRUE)
+
+# Initialize an empty list to store dataframes
+dataframes <- list()
+
+# Loop through each CSV file, read it without column names, and store it in the list
+for (file in csv_files) {
+  df <- read.csv(file, header = FALSE, skip = 2)  # Skip the first row and do not read column names
+  dataframes[[file]] <- df
+}
+
+# Combine all dataframes into one long dataframe
+combined_df <- do.call(rbind, dataframes)
+
+
+
+```
+# Clean and set depths
+###Hobo data was converted from KPa to depths as follows: depths  = (Kpa-101.325)/10
+```{r}
+  combined_df <- combined_df[,-1]
+combined_df$date <- as.POSIXct(combined_df$date, format = "%m/%d/%Y %H:%M")
+combined_df$sample_date <- as.Date(combined_df$date)
+combined_df <- combined_df %>%
+ mutate((depths = PresKpa -101.325)/10)
+  colnames(combined_df) <- c("date", "PresKpa", "TempC", "site_id", "sample_date", "depths")  # Rename columns
+
+
+head(combined_df)
+```
+
+
+#  Filter SY and Ach and Na data sets
+
+```{r}
+#add sample date
+HOBO_data<- combined_df %>%
+  mutate (sample_date = as.POSIXct(date, format = "%d/%m/%Y"))
+HOBO_data<- HOBO_data %>%
+    filter(site_id == "Achziv45" | site_id == 'SdotYam45' |  site_id == 'Nahariya45')  
+HOBO_data$sample_date <- as.Date(HOBO_data$date)
+head(HOBO_data)
+```
+###bin 24-26 depths temperature
+
+```{r}
+
+
+
+
+# Filter the dataframe to include only depths between 24 and 26 meters
+depth_filtered_df <- HOBO_data %>%
+  filter(depths >= 24 & depths <= 26)
+
+# Group by sample_date and calculate the average TempC
+average_temp <- depth_filtered_df %>%
+  group_by(site_id, sample_date) %>%
+  summarize(avg_temp = mean(TempC, na.rm = TRUE))
+
+# Print the result
+print(average_temp)
+write.csv(average_temp, here( "R.generated.Data", "25mTemp_45msites.csv"))
+
+```

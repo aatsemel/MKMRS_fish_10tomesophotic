@@ -1,5 +1,5 @@
 ---
-title: "Data processing for chapter 3: 10-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+title: "Data processing for chapter 3: 10-45 m sites" MKMRS data of fish survey only
 output: html_document
 date: "2022-11-10"
 preparing 3 data sets and combined data sets:
