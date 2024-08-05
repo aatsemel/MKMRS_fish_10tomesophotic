@@ -214,7 +214,34 @@ my_data <- DepthFishdataFact %>%
  head(my_data)
  colnames(my_data)
 ```
+#plotting abundance
 
+```{r}
+#per transect
+AbundancePlotTR <- my_data %>%
+  filter(site == "Achziv" | site == "SdotYam") %>% 
+  ggplot(aes(y = n_ind_sample)) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~site_id) +
+  theme_classic() 
+AbundancePlotTR
+```
+
+```{r}
+#per group
+Group_abund<-my_data %>%
+  dplyr::group_by(Year_season_id)%>% 
+  dplyr::mutate(n_ind_pooled= sum(n_ind_sample)) %>%
+  dplyr::ungroup()
+head(Group_abund)
+AbundancePlotGr <- Group_abund %>%
+  filter(site == "Achziv" | site == "SdotYam") %>% 
+  ggplot(aes(y = n_ind_pooled)) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~site_id) +
+  theme_classic() 
+AbundancePlotGr
+```
 ###Species Matrix +Metadata +transformations
 ```{r}
 colnames(my_data)
@@ -232,38 +259,76 @@ colnames (log2_hel_my_data)
 ### Hill numbers profile Allways use  hill = T
 ```{r}
 renyi_profile <- renyi(sp_matrix,  
-                       scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),
+                       scales = c(0,  1.0, 2),
                        hill = T)
 head(renyi_profile)
+metadataRug <- select(meta_data,1:14, 21:28)
+renyi_df<-bind_cols(metadataRug,renyi_profile)
 
-renyi_df<-bind_cols(meta_data,renyi_profile)
-
-renyi_df<-gather(renyi_df,"Q","Value",30:44)
+renyi_df<-gather(renyi_df,"Q","Value",23:25)
 head(renyi_df)
 renyi_df<-renyi_df %>% arrange(site_id,depth_category,sample_year, season,tag) %>%
    filter(!is.na(Q))
 
 renyi_df$Q <- as.numeric(renyi_df$Q)
 ```
+#Diversity with rugosity VR complete case Mixed effects modelling
+```{r}
+cmplex_data_complete   <- renyi_df[complete.cases(renyi_df), ]
+head (cmplex_data_complete)
+```
+
+Start by loading the data and having a look at them.
 
 ```{r}
-head(renyi_df)
+Q1df <-cmplex_data_complete %>% 
+  filter(Q==1)
+head(Q1df)
+hist(Q1df$LogVR)  # seems close to normal distribution - good!
 
-ggplot(data = renyi_df) +
-  aes(x = Q, y = Value, group = tag, color = factor(sample_date)) +
-  geom_line() +
-  scale_x_continuous(limits = c(0, 10)) +
-  scale_y_continuous(limits = c(0, 13)) +
-  facet_wrap(. ~ site_id) +
-  labs(y = expression("Diversity  D(p) "^"Q")) +
-  theme_classic() +
-  theme(
-    legend.title = element_blank(),  # Remove legend title
-    legend.text = element_text(size = 12)  # Enlarge legend text
-  ) +
- theme (legend.position = "none")
+#decostand (Q1df$Value, method = "sq")
+hist(Q1df$Value)  # seems far from normal distribution -transform
 
+Q1df <- Q1df %>% 
+ mutate(SqValue = (Value)^0.5)
+hist(Q1df$SqValue) # seems close to normal distribution - good!
+Q1df$lat <- as.factor(Q1df$lat)
+```
+#Centering the data
+```{r}
+#we first center and scale the data. this is often useful for mixed-effect models. note that we are only using this for the stats, not to show them in the graphs
 
+Q1df$LogVRCent <- scale(Q1df$LogVR, center = TRUE, scale = TRUE)
+Q1df$mean_depth <- scale(Q1df$LogVR, center = TRUE, scale = TRUE)
+basic.lm <- lm(Value~ LogVRCent, data = Q1df)
+
+summary(basic.lm)
+
+## Let's plot the data with ggplot2
+
+ggplot(Q1df, aes(x = LogVRCent, y = mean_depth)) +
+  geom_point()+
+  geom_smooth(method = "lm")
+```
+```{r}
+if (!require(pacman)) install.packages('pacman')
+library(pacman)
+p_load(ggplot2, lme4,lmerTest,MuMIn)
+
+Q1df$sample_year <- as.factor(Q1df$sample_year)
+
+mixed.lmer <- lmer(Value ~ LogVRCent * mean_depth +  (1|sample_year), data = Q1df) # this is how you write random component effects only the intercept : after this | symbol; assigning slope to the random variables means that you suspect that there is an interaction between the factor and the affected variable
+summary(mixed.lmer)
+r.squaredGLMM(mixed.lmer) #Marginal r-square (R2m) gives the proportion of the fixed in relation to all variation; the conditional r square(R2c) (conditional on the specific beaches we included) includes all the explained variation (fixed an d random). We report the marginal R square
+
+#Random effect
+VarCorr(mixed.lmer)
+
+# Fixed effect
+fixef(mixed.lmer) #compare these to the estimates of the simple lm model!
+#summary(basic.lm)
+# b0 & b1 for Individual sites 
+coef(mixed.lmer)
 
 ```
 
@@ -307,180 +372,9 @@ head(group_trans_data)
 ```
 
 
-```{r}
 
-renyi_profile_group <- renyi(group_year_data[,-c(1:5)],
-                             scales = c(0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2, 4, 8, 16, 32, 64, Inf),  hill = T)
 
-renyi_df_group<-bind_cols(group_year_data[,1:5],renyi_profile_group)
 
-#compose long df with  new Q grouping
-renyi_df_group<-gather(renyi_df_group,"Q","Value",6:20)
-
-renyi_df_group<-renyi_df_group %>% arrange(Year_season_id, site_id,depth_category, season )
-
-renyi_df_group$Q <- as.numeric(renyi_df_group$Q)
-renyi_df_group$depth_category <- as.factor(renyi_df_group$depth_category)
-head(renyi_df_group)
-```
-```{r}
-ggplot(data = renyi_df_group) +
-  aes(x = Q, y = Value, group = Year_season_id, color = factor(season)) +
-  geom_line() +
-  scale_x_continuous(limits = c(0, 10)) +
-  scale_y_continuous(limits = c(0, 20)) +
-  facet_wrap(. ~ site_id) +
-  labs(y = expression("Diversity  D(p) "^"Q")) +
-  theme_classic() +
-    theme(legend.position = "none")
-```
-
-
-#
-
-
-
-```{r}
-
-
-
-bray_scores_site<-list() # create an empty list to store my newly created data
-
-for (i in unique(my_data$site_id)){
-  
-site_data <- my_data %>% filter(site_id == i) # keep only the observation of sample i
-
-site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
-
-site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
-site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
-
-site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
-
-mean_bray <- mean(site_bray_results)
-se_bray <- std.error(site_bray_results)
-Site <- i
-
-bray_data_site <- data.frame(Site,mean_bray,se_bray)
-
-bray_scores_site[[i]]<-bray_data_site
-  
-}
-
-
-
-bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
-
-
-
-# lets plot:
-
-NTTransectBeta <- ggplot(bray_scores_site,aes(x = Site,
-                       y = mean_bray,
-                       color = Site)) +
-  geom_point(size = 4)+
-  geom_errorbar(aes(ymin= mean_bray - se_bray,
-                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
-  scale_color_manual(values = color6) # Specify color palette
-
-NTTransectBeta
-```
-
-###Now with transect transformed data: log2_hel_my_data 
-```{r}
-
-
-
-bray_scores_site<-list() # create an empty list to store my newly created data
-
-for (i in unique(log2_hel_my_data$site_id)){
-  
-site_data <- log2_hel_my_data %>% filter(site_id == i) # keep only the observation of sample i
-
-site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
-
-site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
-site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
-
-site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
-
-mean_bray <- mean(site_bray_results)
-se_bray <- std.error(site_bray_results)
-Site <- i
-
-bray_data_site <- data.frame(Site,mean_bray,se_bray)
-
-bray_scores_site[[i]]<-bray_data_site
-  
-}
-
-
-
-bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
-
-
-
-# lets plot:
-
-TransectBeta <- ggplot(bray_scores_site,aes(x = Site,
-                       y = mean_bray,
-                       color = Site)) +
-  geom_point(size = 4)+
-  geom_errorbar(aes(ymin= mean_bray - se_bray,
-                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
-  scale_color_manual(values = color6) # Specify color palette
-
-TransectBeta
-```
-# grouped data
-
-```{r}
-
-
-
-bray_scores_site<-list() # create an empty list to store my newly created data
-
-for (i in unique(group_year_data$site_id)){
-  
-site_data <- group_year_data %>% filter(site_id == i) # keep only the observation of sample i
-
-site_sp_matrix <- site_data[,first_species:length(site_data)] # create species matrix
-
-site_bray_part <- bray.part(site_sp_matrix) # apply the function that calculate bray Curtis distances 
-site_bray_results<- site_bray_part[[3]] # keep only the bray Curtis results
-
-site_bray_results<-as.numeric(site_bray_results) # convert to numeric object
-
-mean_bray <- mean(site_bray_results)
-se_bray <- std.error(site_bray_results)
-Site <- i
-
-bray_data_site <- data.frame(Site,mean_bray,se_bray)
-
-bray_scores_site[[i]]<-bray_data_site
-  
-}
-
-
-
-bray_scores_site<-bind_rows(bray_scores_site) # convert from list to data frame
-
-
-
-# lets plot:
-
-pGr <-ggplot(bray_scores_site,aes(x = Site,
-                       y = mean_bray,
-                       color = Site)) +
-  geom_point(size = 4)+
-  geom_errorbar(aes(ymin= mean_bray - se_bray,
-                    ymax= mean_bray + se_bray),size =1.2,width = 0.2) +
-  scale_color_manual(values = color6) +theme_classic()  # Specify color palette +
-
-pGr
-
-
-```
 ###Now with transformed data: log2_hel_my_data grouped in group_trans_data 
 
 ```{r}
@@ -548,7 +442,7 @@ AC_incidence <- sp_matrix %>%
 AC_incidence_bind<-bind_cols(meta_data,AC_incidence )
 
 
-caves_beta_pairs <- beta.pair(AC_incidence)
+caves_beta_pairs_tr <- beta.pair(AC_incidence)
 ```
 
 
@@ -566,14 +460,15 @@ AC_incidenceGrp <- sp_data_group %>%
 AC_incidence<-bind_cols(meta_group,AC_incidenceGrp )
 
 
-caves_beta_pairs <- beta.pair(AC_incidenceGrp)
+caves_beta_pairs_gr <- beta.pair(AC_incidenceGrp)
 ```
+#group beta pairs
 ```{r message=FALSE, results='hide'}
 
 
-caves_beta_sample <- beta.sample(AC_incidenceGrp, 
-            sites= 10,  # how many knolls to randomly sample
-            samples = 10) # how many repetitions of (10) knolls to do 
+caves_beta_sample_gr <- beta.sample(AC_incidenceGrp, 
+            sites= 5,  # how many knolls to randomly sample
+            samples = 100) # how many repetitions of (10) knolls to do 
 
 
 ```
@@ -628,7 +523,7 @@ caves_all_years<-caves_all_years %>% filter(Component != "beta.SOR")
 TransectSOr<- ggplot(caves_all_years)+
   aes(x=Year_season,y=mean,fill=Component)+
   geom_bar(stat="identity",position = position_stack())+
-  ylab(expression(paste(beta,"-diversity" (Sorensen)))) +theme_classic() + scale_y_continuous(limits = c(0, 0.7))
+  ylab(expression(paste(beta,"-diversity" (Sorensen)))) +theme_classic() + scale_y_continuous(limits = c(0, 0.8))
 
 TransectSOr
 
@@ -682,7 +577,7 @@ caves_all_years<-caves_all_years %>% filter(Component != "beta.SOR")
 PGrTransSor<- ggplot(caves_all_years)+
   aes(x=Year_season,y=mean,fill=Component)+
   geom_bar(stat="identity",position = position_stack())+
-  ylab(expression(paste(beta,"-diversity " (Sorensen)))) +theme_classic() + scale_y_continuous(limits = c(0, 0.7))
+  ylab(expression(paste(beta,"-diversity " (Sorensen)))) +theme_classic() + scale_y_continuous(limits = c(0, 0.8))
 
 PGrTransSor
 ```
@@ -973,14 +868,14 @@ log2_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 2)
 colnames(rda_data_complete)
 ```
 ```{r}
-rda_results <- rda(log2_trans_hel~ season + depth_category+sample_year,
+rda_results <- rda(log2_trans_hel~ site +season +  depth_category+sample_year,
                 data = rda_data_complete)
 
 rda_results
 summary (rda_results)
+
 ```
-log2_trans_hel_c ~ season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
-                data = rda_data_complete
+
                 
 #CCA was tested but it explains even less of the variation.
 cca_results <- cca(log2_trans_hel~ season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
@@ -993,15 +888,10 @@ cca_results
 
 
 ```{r}
-ordistep(rda_results ,na.action = na.omit)
+sel.os <-ordistep(rda_results ,na.action = na.omit)
+sel.os 
 ```
-# ```{r}
-# rda(log2_trans_hel_c ~  season + depth_category+ reserve+ Hard.Substrate +Soft.Substrate + Algae ,
-#                 data = rda_data_complete)
-# signi.Inv <- rda(log2_trans_hel_c ~  season + depth_category+ reserve+ Soft.Substrate + Algae ,
-#                 data = rda_data_complete)
-# summary (signi.Inv)
-# ```
+
 
 
 Remember. When you see "Inertia", think "Variance". When you see "constrained" think "explained". So, in this example you can see that a proportion of 0.1121 of the inertia is explained. In words, the site_id,Site, knoll surface area and  depth affects ~10% of the all the community variance.
@@ -1095,7 +985,7 @@ log2_trans_hel_c <- decostand (helge_trans_data_c, method = "log",base = 2)
 ```
 ```{r}
 
-rda_results_CC <- rda(log2_trans_hel_c  ~  mean_depth + TempDiff + site + season + sample_year,
+rda_results_CC <- rda(log2_trans_hel_c  ~  mean_depth + TempDiff + site + season + Rugosity + LogVR,
                 data = meta_data_c)
 
 rda_results_CC
@@ -1103,11 +993,9 @@ rda_results_CC
 
 
 ```{r}
-ordistep(rda_results_CC ,na.action = na.omit)
-```
-```{r}
-summary (rda_results_CC)
+sel.osCC <-ordistep(rda_results_CC ,na.action = na.omit)
 
+sel.osCC
 ```
 
 
@@ -1218,7 +1106,7 @@ The simper functions performs pairwise comparisons of groups (i.e, `site_id`) an
 
 ```{r, results='hide'}
 simper_output<-simper(log2_trans_hel, #my community data (transformed)
-                      group = my_data$depth_category) # my group
+                      group = group_trans_data$site_id) # my group
 
 summary(simper_output)
 ```
@@ -1345,4 +1233,6 @@ uniqueAch45 <-setdiff(listAch45,listAch25)
 
 
 ```
+
+
 
