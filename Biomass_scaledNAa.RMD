@@ -1,0 +1,280 @@
+---
+title: "Data processing for chapter 3: 25-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+WHEN UPDATING A NEW FISH_SURVEY FILE- CORRECT VIVIBILITY TO 7 AT AchzivR453Spring2020
+AchzivR454Spring2020
+
+---
+
+### step 1 load data library etc and set wd
+
+
+```{r setup, include=FALSE}
+
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+#For Diversity calculations
+library(plotrix)
+library(betapart)
+library(here)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(ggpubr) 
+# Richness
+library(rareNMtests)
+library(mobr)
+here<-here::here
+
+
+```
+
+```{r}
+# Define the path to your CSV file using here()
+csv_path <- here("data", "fishsurvey_sub2022.csv")
+csv_path1 <- here("data", "monitoring_sites.csv")
+csv_path2 <- here("data", "45FBsize_a_b_with_missing.csv")
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+sites <- read.csv(csv_path1)
+FBsize <- read.csv(csv_path2)
+complex.inic <-read.csv(here("data", "EnvVar10_45.csv"))
+Diet <- read_csv(here("data","Diet.csv"))
+fish_data <-merge(fish_data,sites, by= "site_id") 
+trait <-read.csv(here("data", "Belmaker_Species_Traits.csv"))
+
+# Replace Sdot yam with SdotYam
+
+fish_data$site[fish_data$site == 'Sdot yam'] <- 'SdotYam'
+fish_data$season[fish_data$season == 'fall'] <- 'Fall'
+fish_data = subset(fish_data, select = -c(tag) )
+fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,season,sample_year))
+#Make sure Achziv is Reserve and Sdot Yam Not
+head(trait)
+MedSp <-select(trait,"Species_updated_name_fishbase", "Lessepsian")
+
+head(fish_data)
+colnames(MedSp)<-c("species", "Lessepsian")
+MedSp$Lessepsian <-   as.factor(MedSp$Lessepsian)
+color6 = c("lightblue3", "blue2", "darkblue","yellow3", "darkorange", "brown")
+
+```
+
+
+###QA
+```{r}
+
+# Group by "tag" and count unique "sample_date" values
+result <- fish_data %>%
+  group_by(tag) %>%
+  summarise(unique_dates = n_distinct(sample_date)) %>%
+  filter(unique_dates > 1)
+
+# Print the result
+print(result)
+```
+
+### Subsetting DATA: to include data =="Achziv" \|site=="SdotYam sites, fish_filter will encompass data without fish empty transects and other outliers; all_data_clean includes fish empty transects and outliers and fill be used for richness and diversity calcs
+Filtering species with Fishbase biomass constants
+###Renaming fish name spelling errors; renaming reserve status; cropping distance from transect 
+```{r Subsetting DATA}
+#selecting sublist for comparisons
+fish_filter<-fish_data %>%dplyr:: filter((site=="Achziv" | site=="SdotYam"))
+# Get the unique species names from the FBsize data frame
+FB_species <- unique(FBsize$Fbspecies_chosen)
+fish_filter$species <- sub("Salpa salpa", "Sarpa salpa", fish_filter$species)
+fish_filter$species <- sub("Saprisoma cretense", "Sparisoma cretense", fish_filter$species)
+fish_filter$species <- sub("Diplodos cervinus", "Diplodus cervinus", fish_filter$species)
+
+# Filter the fish_data data frame to keep only rows where the species is present in unique_species
+
+fish_filter <- fish_data[fish_data$species %in% FB_species, ] %>%
+ dplyr:: filter(distance < 5.1)
+
+fish_filter$reserve <- ifelse(fish_filter$site == "Achziv", "R", "N")  
+head(fish_filter)
+
+# Filter season
+#fish_filter <-   fish_filter%>%
+  #filter(season == "Fall")
+```
+
+```{r}
+fb2use<-FBsize
+# Using $ operator with negative indexing
+fb2use$Locality <- NULL
+fb2use$X <- NULL
+fb2use$X.1 <- NULL
+head(fb2use)
+fb2use <- rename(fb2use, species = Fbspecies_chosen)
+
+fish_filter_a_b <- left_join(fish_filter,fb2use, by= "species")
+
+# Calculate the average size for each species and fill NA values with these averages
+fish_filter_a_b <- fish_filter_a_b %>%
+  group_by(species) %>%
+  mutate(size = ifelse(is.na(size), mean(size, na.rm = TRUE), size)) %>%
+  ungroup() %>%
+  mutate(fish_weight = a * size^b)
+
+# Display the first few rows
+head(fish_filter_a_b)
+
+```
+#A. calculate the total number of individuals per species 
+norm weight: scale the weight : weight -mean weight devided by the standard deviation
+
+```{r}
+
+fish_long <- fish_filter_a_b %>%
+  dplyr::select(-transect, -a_b, -a, -b, -habitat, -depth, -factor_visibility, -observer,  -distance, -visibility, -size, -taxonomy_group) %>%
+  arrange(tag)%>% 
+  relocate(species, .after = tag) %>%
+  dplyr::mutate(
+    occ = 1)
+#      ) %>% 
+#   dplyr::group_by(across(site_id:tag)) %>% 
+#   dplyr::mutate(
+#        "tag_weight" = sum(fish_weight),  "total_ind" = sum(occ)
+#   ) %>% 
+#   ungroup()
+# head(fish_long)
+
+fish_long_med <- left_join(fish_long,MedSp, by = "species")
+  # Summarize fish_weight and occ per tag
+fish_summary <- fish_long_med %>%
+   relocate(Lessepsian, .after = tag) %>% 
+  group_by((across(site_id:Lessepsian))) %>%
+  summarize(
+    tag_weight = sum(fish_weight, na.rm = TRUE),  # Summing fish_weight per tag
+    total_ind = sum(occ, na.rm = TRUE)            # Summing occ per tag
+  )
+
+# View the summary
+head(fish_summary)
+```
+#Overall biomass
+```{r}
+Biomass <- fish_summary %>%
+  filter(site == "Achziv" | site == "SdotYam")
+ 
+Plot_biomass <- Biomass%>%
+  ggplot(aes(y = log2(tag_weight /1000))) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~site_id) +
+  theme_classic() +
+  scale_color_manual(values = color6) +
+  ylab("Log2 of biomass [Kg] per 1000 square m") + theme(axis.text.x = element_blank())
+Plot_biomass
+
+
+```
+#Lesspesians
+```{r}
+Plot_biomassLess <- Biomass %>%
+  ggplot(aes(y = log2(tag_weight / 1000), x= site_id, color = Lessepsian)) +  # Use 'color' to partition by Lessepsian
+  geom_boxplot(notch = TRUE, notchwidth = 0.3) +
+ # facet_wrap(~site_id) +
+    ylab("Log2 of biomass [Kg] per 1000 square m") +
+theme_classic() +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"))  # Reverse color scale: 0 = blue, 1 = red
+
+Plot_biomassLess
+```
+
+#Overall abundannce
+```{r}
+abundannce <- fish_summary %>%
+  filter(site == "Achziv" | site == "SdotYam")
+ 
+Plot_abundannce <- abundannce%>%
+  ggplot(aes(y = total_ind)) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~site_id) +
+  theme_classic() +
+  scale_color_manual(values = color6) +
+  ylab("Fish abundance per 1000 square m") + theme(axis.text.x = element_blank())
+Plot_abundannce
+
+
+```
+#Lesspesian Abundance
+```{r}
+Plot_abundLess <- Biomass %>%
+  ggplot(aes(y = total_ind, x = site_id, color = Lessepsian)) +  # Use 'color' to partition by Lessepsian and treat it as a factor
+  geom_boxplot(notch = TRUE, notchwidth = 0.3) +
+  ylab("Fish abundance per 1000 square m") +
+  theme_classic() +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"))  # Reverse color scale: 0 = blue, 1 = red
+
+Plot_abundLess
+
+```
+### Combining with functional grouping
+```{r}
+fish_long_Diet <- fish_long_med %>% 
+  left_join(Diet, by = "species" )  %>%
+  filter(!is.na(Diet))
+head(fish_long_Diet)
+write.csv(fish_long_Diet, here("R.generated.Data","fish_size_diet.csv" ))
+```
+### Plotting
+#B. Calculate  the total number of species (n_species_sample)and total individuals per survey (n_ind_sample))
+
+```{r}
+head(fish_long_Diet)
+  fish_summaryDiet <- fish_long_Diet %>%
+   relocate(Diet, .after = tag)%>%
+   relocate(Lessepsian, .after = Diet) %>% 
+  group_by((across(site_id:Lessepsian))) %>%
+  summarize(
+    tag_weight = sum(fish_weight, na.rm = TRUE),  # Summing fish_weight per tag
+    total_ind = sum(occ, na.rm = TRUE)            # Summing occ per tag
+  )
+
+# View the summary
+head(fish_summaryDiet)
+```
+
+##plotting the relationship between species and individuals number:
+```{r}
+colorDiet = c("red", "green4", "darkorange","brown","grey", "darkblue")
+fish_summaryDiet %>%
+  filter(site == "Achziv" | site == "SdotYam") %>%
+  ggplot(aes(x=log10(total_ind),
+           y=log2(tag_weight/1000),
+           color = Diet, shape = Lessepsian))+
+        xlab("Log10(Trophic abundance per sampling day)")+
+       ylab("Log2(Biomass, Kg)")+
+      ggtitle("Relationship between Trophic group abundance and biomass")+
+  geom_jitter()+
+    facet_wrap(~site_id ) +theme_classic()  +
+  scale_color_manual(values = colorDiet) # Specify color palette
+```
+```{r}
+colorDiet = c("red", "green4", "darkorange","brown","grey", "darkblue")
+fish_summaryDiet %>%
+  filter(site == "Achziv" | site == "SdotYam") %>%
+  ggplot(aes(x=log10(total_ind),
+           y=log2(tag_weight/1000),
+           color = Diet))+
+        xlab("Log10(Trophic abundance per sampling day)")+
+       ylab("Log2(Biomass, Kg)")+
+      ggtitle("Relationship between Trophic group abundance and biomass")+
+  geom_jitter()+
+    facet_wrap(~site_id ) +theme_classic()  +
+  scale_color_manual(values = colorDiet) # Specify color palette
+```

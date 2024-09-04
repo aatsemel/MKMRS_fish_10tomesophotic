@@ -1,0 +1,440 @@
+---
+title: "Data processing for chapter 3: 25-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+WHEN UPDATING A NEW FISH_SURVEY FILE- CORRECT VIVIBILITY TO 7 AT AchzivR453Spring2020
+AchzivR454Spring2020
+
+---
+
+### step 1 load data library etc and set wd
+
+
+```{r setup, include=FALSE}
+
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(labdsv)
+library(tidyverse)
+library(reshape2)
+library(vegan)
+library(assertthat)
+library(devtools)
+#For Diversity calculations
+library(plotrix)
+library(betapart)
+library(here)
+library(ggridges)
+
+library(ggtext)# for italics in the plot legend 
+library(ggpubr) 
+# Richness
+library(rareNMtests)
+library(mobr)
+here<-here::here
+
+
+```
+
+```{r}
+# Define the path to your CSV file using here()
+csv_path <- here("data", "fishsurvey_sub2022.csv")
+csv_path1 <- here("data", "monitoring_sites.csv")
+csv_path2 <- here("data", "45FBsize_a_b_with_missing.csv")
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+sites <- read.csv(csv_path1)
+FBsize <- read.csv(csv_path2)
+complex.inic <-read.csv(here("data", "EnvVar10_45.csv"))
+Diet <- read_csv(here("data","Diet.csv"))
+fish_data <-merge(fish_data,sites, by= "site_id") 
+trait <-read.csv(here("data", "Belmaker_Species_Traits.csv"))
+
+# Replace Sdot yam with SdotYam
+
+fish_data$site[fish_data$site == 'Sdot yam'] <- 'SdotYam'
+fish_data$season[fish_data$season == 'fall'] <- 'Fall'
+fish_data = subset(fish_data, select = -c(tag) )
+fish_data<- fish_data %>% mutate (tag= paste0(site,depth_category,transect,season,sample_year))
+#Make sure Achziv is Reserve and Sdot Yam Not
+head(trait)
+MedSp <-select(trait,"Species_updated_name_fishbase", "Lessepsian")
+
+head(fish_data)
+colnames(MedSp)<-c("species", "Lessepsian")
+MedSp$Lessepsian <-   as.factor(MedSp$Lessepsian)
+
+
+```
+
+
+###QA
+```{r}
+
+# Group by "tag" and count unique "sample_date" values
+result <- fish_data %>%
+  group_by(tag) %>%
+  summarise(unique_dates = n_distinct(sample_date)) %>%
+  filter(unique_dates > 1)
+
+# Print the result
+print(result)
+```
+
+### Subsetting DATA: to include data =="Achziv" \|site=="SdotYam sites, fish_filter will encompass data without fish empty transects and other outliers; all_data_clean includes fish empty transects and outliers and fill be used for richness and diversity calcs
+Filtering species with Fishbase biomass constants
+###Renaming fish name spelling errors; renaming reserve status; cropping distance from transect 
+```{r Subsetting DATA}
+#selecting sublist for comparisons
+fish_filter<-fish_data %>%dplyr:: filter((site=="Achziv" | site=="SdotYam"))
+# Get the unique species names from the FBsize data frame
+FB_species <- unique(FBsize$Fbspecies_chosen)
+fish_filter$species <- sub("Salpa salpa", "Sarpa salpa", fish_filter$species)
+fish_filter$species <- sub("Saprisoma cretense", "Sparisoma cretense", fish_filter$species)
+fish_filter$species <- sub("Diplodos cervinus", "Diplodus cervinus", fish_filter$species)
+
+# Filter the fish_data data frame to keep only rows where the species is present in unique_species
+
+fish_filter <- fish_data[fish_data$species %in% FB_species, ] %>%
+ dplyr:: filter(distance < 5.1)
+
+fish_filter$reserve <- ifelse(fish_filter$site == "Achziv", "R", "N")  
+head(fish_filter)
+
+# Filter season
+#fish_filter <-   fish_filter%>%
+  #filter(season == "Fall")
+```
+
+```{r}
+fb2use<-FBsize
+# Using $ operator with negative indexing
+fb2use$Locality <- NULL
+fb2use$X <- NULL
+fb2use$X.1 <- NULL
+head(fb2use)
+fb2use <- rename(fb2use, species = Fbspecies_chosen)
+
+fish_filter_a_b <- left_join(fish_filter,fb2use, by= "species")
+fish_filter_a_b <- fish_filter_a_b %>%
+  mutate(fish_weight =  a * size^b )
+head(fish_filter_a_b)
+
+```
+#A. calculate the total number of individuals per species 
+norm weight: scale the weight : weight -mean weight devided by the standard deviation
+
+```{r}
+
+fish_long <- fish_filter_a_b %>%
+  dplyr::select(-transect, -a_b, -a, -b, -habitat, -depth, -factor_visibility, -observer, -size, -distance, -tag, -taxonomy_group) %>%
+  dplyr::relocate(species, .after = lat) %>%
+  dplyr::mutate(
+    occ = 1,
+    norm_wt = scale(fish_weight , center = TRUE, scale = TRUE)
+  ) %>% 
+  dplyr::group_by(across(site_id:species)) %>% 
+  dplyr::summarise(
+    total_ind = sum(occ),
+    sp_weight = sum(fish_weight),
+    Av.norm = mean(norm_wt)
+  ) %>% 
+  ungroup()
+fish_long <- left_join(fish_long,MedSp, by = "species")
+  
+head(fish_long)
+```
+#B. Calculate  the total number of species (n_species_sample)and total individuals per survey (n_ind_sample))
+
+```{r}
+fish_long<-fish_long %>%
+  dplyr::group_by(across(site_id:species)) %>% 
+  dplyr::mutate(n_species_sample = n_distinct(species),
+          n_ind_sample= sum(total_ind)) %>%
+  dplyr::ungroup()
+head(fish_long)
+```
+### Combining with functional grouping
+```{r}
+fish_long_Diet <- fish_long %>% 
+  left_join(Diet, by = "species" )  %>%
+  filter(!is.na(Diet))
+head(fish_long_Diet)
+write.csv(fish_long_Diet, here("R.generated.Data","fish_size_diet.csv" ))
+```
+### Plotting
+
+##plotting the relationship between species and individuals number:
+```{r}
+colorDiet = c("red", "green4", "darkorange","brown","grey", "darkblue")
+fish_long_Diet %>%
+  filter(site == "Achziv" | site == "SdotYam") %>%
+  ggplot(aes(x=log10(n_ind_sample),
+           y=log2(sp_weight/1000),
+           color = Diet))+
+        xlab("Log10 of abundance per 1,000 sqare m")+
+       ylab("Log2 of Weight, Kg")+
+      ggtitle("Relationship between Trophic group abundance and weight")+
+  geom_jitter()+
+    facet_wrap(~site_id ) +theme_classic()  +
+  scale_color_manual(values = colorDiet) # Specify color palette
+```
+```{r}
+color6 = c("lightblue3", "blue2", "darkblue","yellow3", "darkorange", "brown")
+Biomass <- fish_long_Diet %>%
+  filter(site == "Achziv" | site == "SdotYam")%>%
+  dplyr::relocate(Diet, .after = lat) %>%
+  dplyr::relocate(Lessepsian, .after = date_id) %>% 
+  dplyr::group_by(across(site_id:lat)) %>% 
+  dplyr::summarise(Diet_biomass = sum(sp_weight)) 
+Plot_biomass <- Biomass%>%
+  ggplot(aes(y = log2(Diet_biomass /1000))) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~site_id) +
+  theme_classic() +
+  scale_color_manual(values = color6) +
+  ylab("Log2 of biomass [Kg] per 1000 square m") + theme(axis.text.x = element_blank())
+#Lessepsian biomass
+Plot_biomass <- Biomass %>%
+  ggplot(aes(y = log2(Diet_biomass / 1000), fill = Lessepsian)) +  # Use 'fill' for stacked effect or 'color' for borders
+  geom_boxplot(notch = TRUE, notchwidth = 0.8) +
+ 
+  theme_classic() +
+  scale_fill_manual(values = c(1 = "red", 0 = "blue")) +  # Customize colors
+  ylab("Log2 of biomass [Kg] per 1000 square m") +
+  theme(axis.text.x = element_blank())
+# facet_wrap(~site_id) +
+print(Plot_biomass)
+
+```
+
+```{r}
+# Define breaks for the histogram with each bin twice the value of the preceding one
+custom_breaks <- 2^(0:10)
+fish_wide %>%
+   ggplot(aes( x= log2(n_ind_sample),   y = n_species_sample, color= season))+ geom_col(breaks = custom_breaks)+
+        xlab("log2(Abundance) at 10 m depth sites")+
+       ylab("No. of species")+ theme_classic() + scale_y_continuous(limits = c(0, 30))
+```
+```{r}
+# Example bxpT
+bxpT <- ggplot(my_data, aes(x = site_id, y = LogVR)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Log(Vertical Relief)")
+
+# Set y-axis limits without truncating data points
+bxpT <- bxpT + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpT)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpT <- bxpT     + labs(x = NULL)   # 
+bxpT
+```
+
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpS <- ggplot(my_data, aes(x = site_id, y = Rugosity)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Rugosity")
+
+# Set y-axis limits without truncating data points
+#bxpS <- bxpS + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpS)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpS <- bxpS     + labs(x = NULL)   # 
+bxpS
+```
+
+
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpH <- ggplot(my_data, aes(x = site_id, y = Slope)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Slope")
+
+# Set y-axis limits without truncating data points
+#bxpH <- bxpH + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpH)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpH <- bxpH     + labs(x = NULL)   # 
+bxpH
+```
+```{r}
+# Assuming you have a ggplot object named bxpT
+# Replace it with your actual ggplot object
+
+# Example bxpT
+bxpC <- ggplot(my_data, aes(x = site_id, y = Curvature)) +
+  geom_boxplot() + 
+  theme_classic() +
+  labs(x = "Site id", y = "Curvature")
+
+# Set y-axis limits without truncating data points
+#bxpC <- bxpC + scale_y_continuous(limits = c(0, 1))
+
+# Print the modified ggplot
+print(bxpC)
+
+#scale_y_continuous(expand = c(0, 0)) 
+# Remove x-axis title
+bxpC <- bxpC     + labs(x = NULL)   # 
+bxpC
+```
+### ANOVA testing
+```{r}
+# Convert depth_category to factor for correct analysis
+my_data$depth_category <- as.factor(my_data$depth_category)
+# my_data_sy <-my_data %>%
+#   filter(site == "SdotYam")
+
+
+# Perform two-way ANOVA for SY
+anova_result <- aov(LogVR ~ site * depth_category , data = my_data)
+summary(anova_result)
+```
+
+
+```{r}
+library(ggpubr)
+# Set a common x-axis titlec ommon.legend = TRUE,  common.xlabel = "N" )
+tiff("Habitat heterogeneity indices.jpeg", units="in", width=7, height=6, res=600)
+diversPlots <- ggarrange( bxpT, bxpS, bxpH, bxpC, 
+          labels = c("       a ", "      b ", "       c ", "      d   "),
+          ncol = 2, nrow = 2)   # Set a common x-axis title)
+diversPlots
+dev.off()
+diversPlots
+
+```
+
+```{r}
+# Set up a 1 row, 5 column layout for plotting
+par(mfrow=c(1, 6))
+
+# Loop through each Diet group and create a boxplot
+for (i in 1:min(6, length(diet_groups))) {
+  if (i <= length(diet_groups)) {
+    boxplot(norm_wt ~ site_id, data = diet_groups[[i]],
+            main = names(diet_groups)[i],
+            xlab = "NULL", ylab = "NULL")
+  } else {
+    plot.new() # Create an empty plot for remaining panels
+  }
+}
+
+
+```
+
+```{r}
+# Split the data frame by Diet
+add_sample <- function(x){
+   return(c(y = max(x) + .025, 
+            label = length(x)))
+}
+diet_groups <- split(fish_filter_a_b, fish_filter_a_b$Diet)
+
+
+# Define your color vector
+color6 <- c("lightblue3", "blue2", "darkblue", "yellow3", "darkorange", "brown")
+
+# Loop through each Diet group and create a boxplot
+for (i in 1:min(6, length(diet_groups))) {
+  plot_name <- paste0("size", i, ".png")
+  
+  if (i <= length(diet_groups)) {
+    png(plot_name, width = 800, height = 600) # Open a PNG graphics device
+    boxplot(norm_wt ~ site_id, data = diet_groups[[i]],
+            main = names(diet_groups)[i],
+            xlab = "Site ID", ylab = "Normalized Weight",
+            col = color6[1:length(unique(diet_groups[[i]]$site_id))],
+            border = color6[1:length(unique(diet_groups[[i]]$site_id))],
+            pch = 21, bg = color6[1:length(unique(diet_groups[[i]]$site_id))])
+    # Add labels for number of samples
+    add_sample_values <- add_sample(diet_groups[[i]]$norm_wt)
+    text(x = 1, y = add_sample_values["y"], labels = add_sample_values["label"], pos = 1, cex = 0.8, col = "black")
+    
+    
+    dev.off() # Close the graphics device to save the plot
+  } else {
+    plot.new() # Create an empty plot for remaining panels
+  }
+}
+
+
+```
+
+
+```{r}
+library(ggrepel)
+
+# Split the data frame by Diet
+add_sample <- function(x){
+  return(c(y = max(x) + .025, 
+           label = length(x)))
+}
+diet_groups <- split(fish_filter_a_b, fish_filter_a_b$Diet)
+
+# Define your color vector
+color6 <- c("lightblue3", "blue2", "darkblue", "yellow3", "darkorange", "brown")
+
+# Loop through each Diet group and create a boxplot
+for (i in 1:min(5, length(diet_groups))) {
+  plot_name <- paste0("size", i, ".png")
+  
+  if (i <= length(diet_groups)) {
+    png(plot_name, width = 800, height = 600) # Open a PNG graphics device
+    
+    # Create a ggplot object
+    p <- ggplot(diet_groups[[i]], aes(x = as.factor(site_id), y = norm_wt, fill = as.factor(site_id))) +
+      geom_boxplot() +
+      labs(title = names(diet_groups)[i], x = "Site ID", y = "Normalized Weight") +
+      scale_fill_manual(values = color6[1:length(unique(diet_groups[[i]]$site_id))]) +
+      theme_minimal()+
+  stat_summary(
+    geom = "text",
+    fun.data = add_sample,
+    aes(label = paste("n =", ..label..),
+        color = species,
+        color = after_scale(darken(color, .1, space = "HLS"))),
+    family = "Roboto Condensed",
+    size = 4,
+   position = position_dodge(width = 0.9)
+  )  
+      
+    
+    print(p)
+    dev.off() # Close the graphics device to save the plot
+  } else {
+    plot.new() # Create an empty plot for remaining panels
+  }
+}
+
+    
+```
