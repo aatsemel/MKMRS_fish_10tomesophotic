@@ -1,0 +1,82 @@
+---
+title: "FishSize"
+author: "AT"
+date: "2024-02-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("rfishbase")
+library("dplyr")
+library("here")
+```
+
+```{r}
+fish<- read.csv(here("Data", "fishsurvey_sub2022.csv"))
+
+
+fishes <-as.list(c(unique(fish_long$species) ))
+
+values_to_exclude   <- as.list(c("Epinephelus sp", "Gobius sp","Dasyatis sp","Symphodus sp","Echeneis sp","Siganus sp","Sardin sp","Scomber sp"))
+fishes_filtered <-setdiff(fishes, values_to_exclude)
+fishes_filtered <-as.data.frame(fishes_filtered)
+fishes_filtered$X.Salpa.salpa. <- sub("Salpa salpa", "Sarpa salpa", fishes_filtered$X.Salpa.salpa.)
+```
+```{r}
+
+
+# Retrieve depth range data
+depth_data <- species(fishes_filtered ) %>%
+  select(Species, DepthRangeShallow, DepthRangeDeep)
+```
+
+```{r}
+result_table <- fish_long %>%
+  # If you don't have a count column, uncomment the next line
+  # mutate(count = 1) %>%
+  group_by(species, depth_category) %>%
+  summarise(total = sum(total_ind)) %>%
+  pivot_wider(
+    names_from = depth_category,
+    values_from = total,
+    values_fill = 0
+  )%>%
+  rename(Species = species)
+
+# View the result
+print(result_table)
+depth_range_abun<- left_join(result_table,depth_data, by= "Species")
+depth_range_abun
+write.csv(depth_range_abun, here("R.generated.Data", "FishbaseDepthDist.csv"))
+```
+
+
+# Assuming your dataframe is called 'df' with columns 'species', 'depth_category', and 'count'
+# If you don't have a 'count' column, you can create one with value 1 for each row
+
+
+```{r}
+library(tidyverse)
+
+# Assuming your dataframe is called 'df' with columns 'species', 'depth_category', and 'count'
+# If you don't have a 'count' column, you can create one with value 1 for each row
+
+result_table <- df %>%
+  # If you don't have a count column, uncomment the next line
+  # mutate(count = 1) %>%
+  group_by(species, depth_category) %>%
+  summarise(total = sum(count)) %>%
+  pivot_wider(
+    names_from = depth_category,
+    values_from = total,
+    values_fill = 0
+  )
+
+# View the result
+print(result_table)
+```
+
+
+

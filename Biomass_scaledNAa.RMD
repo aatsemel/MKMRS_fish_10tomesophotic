@@ -53,7 +53,6 @@ sites <- read.csv(csv_path1)
 FBsize <- read.csv(csv_path2)
 complex.inic <-read.csv(here("data", "EnvVar10_45.csv"))
 Diet <- read_csv(here("data","Diet.csv"))
-fish_data <-merge(fish_data,sites, by= "site_id") 
 trait <-read.csv(here("data", "Belmaker_Species_Traits.csv"))
 
 # Replace Sdot yam with SdotYam
@@ -157,7 +156,9 @@ fish_long_med <- left_join(fish_long,MedSp, by = "species")
   # Summarize fish_weight and occ per tag
 fish_summary <- fish_long_med %>%
    relocate(Lessepsian, .after = tag) %>% 
-  group_by((across(site_id:Lessepsian))) %>%
+  relocate(depth_category, .after = site_id) %>% 
+   relocate(site, .after = season) %>% 
+  group_by((across(site:Lessepsian))) %>%
   summarize(
     tag_weight = sum(fish_weight, na.rm = TRUE),  # Summing fish_weight per tag
     total_ind = sum(occ, na.rm = TRUE)            # Summing occ per tag
@@ -171,10 +172,11 @@ head(fish_summary)
 Biomass <- fish_summary %>%
   filter(site == "Achziv" | site == "SdotYam")
  
+
 Plot_biomass <- Biomass%>%
   ggplot(aes(y = log2(tag_weight /1000))) +
   geom_boxplot(notch=TRUE, notchwidth = 0.8) +
-  facet_wrap(~site_id) +
+  facet_wrap(~depth_category) +
   theme_classic() +
   scale_color_manual(values = color6) +
   ylab("Log2 of biomass [Kg] per 1000 square m") + theme(axis.text.x = element_blank())
@@ -182,6 +184,8 @@ Plot_biomass
 
 
 ```
+
+
 #Lesspesians
 ```{r}
 Plot_biomassLess <- Biomass %>%
@@ -211,18 +215,7 @@ Plot_abundannce
 
 
 ```
-#Lesspesian Abundance
-```{r}
-Plot_abundLess <- Biomass %>%
-  ggplot(aes(y = total_ind, x = site_id, color = Lessepsian)) +  # Use 'color' to partition by Lessepsian and treat it as a factor
-  geom_boxplot(notch = TRUE, notchwidth = 0.3) +
-  ylab("Fish abundance per 1000 square m") +
-  theme_classic() +
-  scale_color_manual(values = c("0" = "blue", "1" = "red"))  # Reverse color scale: 0 = blue, 1 = red
 
-Plot_abundLess
-
-```
 ### Combining with functional grouping
 ```{r}
 fish_long_Diet <- fish_long_med %>% 
@@ -236,10 +229,15 @@ write.csv(fish_long_Diet, here("R.generated.Data","fish_size_diet.csv" ))
 
 ```{r}
 head(fish_long_Diet)
-  fish_summaryDiet <- fish_long_Diet %>%
-   relocate(Diet, .after = tag)%>%
-   relocate(Lessepsian, .after = Diet) %>% 
-  group_by((across(site_id:Lessepsian))) %>%
+fish_summaryDiet <- fish_long_Diet %>%
+    relocate(Lessepsian, .after = Diet) %>% 
+    relocate(site_id, .after = sample_year) %>%
+    relocate(season, .after = sample_year) %>% 
+  relocate(site, .after = site_id) %>% 
+  relocate(Diet, .after = date_id) %>%
+      relocate(depth_category, .after = Diet) %>% 
+  relocate(tag, .after = depth_category) %>% 
+  group_by((across(site:depth_category))) %>%
   summarize(
     tag_weight = sum(fish_weight, na.rm = TRUE),  # Summing fish_weight per tag
     total_ind = sum(occ, na.rm = TRUE)            # Summing occ per tag
@@ -247,6 +245,153 @@ head(fish_long_Diet)
 
 # View the summary
 head(fish_summaryDiet)
+
+```
+
+```{r}
+fish_wide<- spread(fish_summaryDiet,Diet, tag_weight,fill = 0)
+head(fish_wide)
+colnames(fish_wide)
+
+# df <-fish_summaryDiet%>%
+#   filter(site %in% c("Achziv", "SdotYam")) %>%
+#   group_by(depth_category) %>%
+#   wilcox_test(visibility ~ site) %>%
+#   adjust_pvalue(method = "bonferroni")
+# df
+```
+#Diet  Biomass Color scale
+```{r}
+
+colorDiet = c("FC" = "red", "H" = "green4", "Mi" = "darkorange","Ma" = "brown","O" = "grey", "PK"= "darkblue")
+fish_DietP<-fish_summaryDiet %>%
+  filter(site == "Achziv" | site == "SdotYam" ) %>%
+  group_by(depth_category, Diet) %>%
+  summarize(avg_biomass = mean(tag_weight, na.rm = TRUE))
+# Create the stacked bar plot
+ggplot(data = fish_DietP, aes(x = as.factor(depth_category), y = avg_biomass/1000, fill = Diet)) +
+  geom_col( position = "stack") +
+  scale_fill_manual(values = colorDiet) +  # Apply the custom color palette
+  theme_classic() +
+  labs(
+    x = "Site ID",
+    y = "Log of Mean Fish Biomass per 1000 sqm",
+    fill = "Diet"
+  ) +
+  theme(
+    text = element_text(size = 16),  # Set overall text size to 18
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )+scale_y_log10()
+```
+```{r}
+ggplot(data = fish_DietP, aes(x = as.factor(depth_category), y = avg_biomass/1000, fill = Diet)) +
+  geom_col( position = "stack") +
+  scale_fill_manual(values = colorDiet) +  # Apply the custom color palette
+  theme_classic() +
+  labs(
+    x = "Site ID",
+    y = "Mean Fish Biomass[Kg] per 1000 sqm",
+    fill = "Diet"
+  ) +
+  theme(
+    text = element_text(size = 16),  # Set overall text size to 18
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+```
+#Abundance
+
+```{r}
+
+colorDiet = c("FC" = "red", "H" = "green4", "Mi" = "darkorange","Ma" = "brown","O" = "grey", "PK"= "darkblue")
+fish_DietAbundP<-fish_summaryDiet %>%
+  filter(site == "Achziv" | site == "SdotYam" ) %>%
+  group_by(depth_category, Diet) %>%
+  summarize(avg_abund = mean(total_ind, na.rm = TRUE))
+# Create the stacked bar plot
+ggplot(data = fish_DietAbundP, aes(x = as.factor(depth_category), y = avg_abund, fill = Diet)) +
+  geom_col( position = "stack") +
+  scale_fill_manual(values = colorDiet) +  # Apply the custom color palette
+  theme_classic() +
+  labs(
+    x = "Site ID",
+    y = "Log of Mean Abundnace per 1000 sqm",
+    fill = "Diet"
+  ) +
+  theme(
+    text = element_text(size = 16),  # Set overall text size to 18
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )+scale_y_log10()
+```
+```{r}
+ggplot(data = fish_DietP, aes(x = as.factor(depth_category), y = avg_biomass/1000, fill = Diet)) +
+  geom_col( position = "stack") +
+  scale_fill_manual(values = colorDiet) +  # Apply the custom color palette
+  theme_classic() +
+  labs(
+    x = "Site ID",
+    y = "Mean Fish Biomass[Kg] per 1000 sqm",
+    fill = "Diet"
+  ) +
+  theme(
+    text = element_text(size = 16),  # Set overall text size to 18
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+```
+#The effect of depth_category on Diet
+```{r}
+
+fish_summaryH<-fish_summaryDiet %>%
+  filter(site == "Achziv" |"SdotYam" ) %>%
+  filter(Diet == "H") 
+
+ fish_plotH <-ggplot(fish_summaryH, aes(x=total_ind,
+           y=-depth_category,
+           color = site))+
+        xlab("Herbivore abundance")+
+       ylab("Depth category")+  geom_jitter() +theme_classic()  #+      ggtitle("Relationship between Trophic group abundance and biomass")+
+fish_plotH
+scale.lm=lm(total_ind~depth_category, data=fish_summaryH) #simple linear model for extracting the slope
+observed_slp=scale.lm$coef[2] #extracting the value of the slope from the model
+observed_slp #prints the value of the slope
+summary(scale.lm)
+```
+#Randomization testing 
+```{r}
+rand_slopes = replicate(1000,{
+  random_x = sample(fish_summaryH$depth_category,length(fish_summaryH$depth_category),replace = F) #sample with no replacements 
+  random_model = lm(fish_summaryH$total_ind ~ random_x) 
+  random_model$coef[2]
+})
+```
+```{r}
+hist(rand_slopes,xlim=c(-1.5,1.5))
+abline(v=observed_slp, col='red')
+```
+#Obtaining p value
+```{r}
+
+sum( rand_slopes<=  observed_slp)
+
+# Or in terms of a p-value:
+
+sum( rand_slopes<=  observed_slp)/1000
+```
+
+
+
+```{r}
+
+fish_summaryDiet %>%
+  filter(site == "Achziv" | site == "SdotYam") %>%
+  ggplot(aes(x=log10(total_ind),
+           y=log2(tag_weight/1000),
+           color = Diet))+
+        xlab("Log10(Trophic abundance per sampling day)")+
+       ylab("Log2(Biomass, Kg)")+
+      ggtitle("Relationship between Trophic group abundance and biomass")+
+  geom_jitter()+
+    facet_wrap(~site_id ) +theme_classic()  +
+  scale_color_manual(values = colorDiet) # Specify color palette
 ```
 
 ##plotting the relationship between species and individuals number:
@@ -264,17 +409,15 @@ fish_summaryDiet %>%
     facet_wrap(~site_id ) +theme_classic()  +
   scale_color_manual(values = colorDiet) # Specify color palette
 ```
+#Lesspesian Abundance
 ```{r}
-colorDiet = c("red", "green4", "darkorange","brown","grey", "darkblue")
-fish_summaryDiet %>%
-  filter(site == "Achziv" | site == "SdotYam") %>%
-  ggplot(aes(x=log10(total_ind),
-           y=log2(tag_weight/1000),
-           color = Diet))+
-        xlab("Log10(Trophic abundance per sampling day)")+
-       ylab("Log2(Biomass, Kg)")+
-      ggtitle("Relationship between Trophic group abundance and biomass")+
-  geom_jitter()+
-    facet_wrap(~site_id ) +theme_classic()  +
-  scale_color_manual(values = colorDiet) # Specify color palette
+Plot_abundLess <- Biomass %>%
+  ggplot(aes(y = total_ind, x = site_id, color = Lessepsian)) +  # Use 'color' to partition by Lessepsian and treat it as a factor
+  geom_boxplot(notch = TRUE, notchwidth = 0.3) +
+  ylab("Fish abundance per 1000 square m") +
+  theme_classic() +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"))  # Reverse color scale: 0 = blue, 1 = red
+
+Plot_abundLess
+
 ```

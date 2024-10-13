@@ -22106,11 +22106,11 @@ transect,a_b,site,reserve,habitat,sample_date,sample_year,depth,depth_category,s
 4,a,Achziv,R,Rocky,09/11/2021,2021,45,45,Fall,Achziv45,AchzivR454Fall2021,9,0.37037037,SE,Epinephelus costae,30,3,18940,fish
 4,a,Achziv,R,Rocky,09/11/2021,2021,45,45,Fall,Achziv45,AchzivR454Fall2021,9,0.37037037,SE,Coris julis,6,3,18940,fish
 4,a,Achziv,R,Rocky,09/11/2021,2021,45,45,Fall,Achziv45,AchzivR454Fall2021,9,0.37037037,SE,Coris julis,4,3,18940,fish
-1,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN251Fall2021,3,1.111111111,SE,Empty transect,NA,NA,18924,fish
+1,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN251Fall2021,3,1.111111111,SE,Empty transect,NA,3,18924,fish
 2,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN252Fall2021,3,1.111111111,SE,Sargocentron rubrum,10,2,18924,fish
 2,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN252Fall2021,3,1.111111111,SE,Epinephelus marginatus,20,0,18924,fish
 2,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN252Fall2021,3,1.111111111,SE,Epinephelus marginatus,15,2,18924,fish
-3,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN253Fall2021,3,1.111111111,SE,Empty transect,NA,NA,18924,fish
+3,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN253Fall2021,3,1.111111111,SE,Empty transect,NA,3,18924,fish
 4,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN254Fall2021,3,1.111111111,SE,Diplodus cervinus,30,1.5,18924,fish
 4,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN254Fall2021,3,1.111111111,SE,Chromis chromis,4,0.5,18924,fish
 4,a,Ashkelon,N,Rocky,24/10/2021,2021,30,25,Fall,Ashkelon30,AshkelonN254Fall2021,3,1.111111111,SE,Chromis chromis,4,0.5,18924,fish
@@ -22805,8 +22805,8 @@ transect,a_b,site,reserve,habitat,sample_date,sample_year,depth,depth_category,s
 4,a,Achziv,R,Rocky,18/05/2021,2021,45,45,Spring,Achziv45,AchzivR454Spring2021,5,0.666666667,SE,Serranus cabrilla,10,2,18765,fish
 4,a,Achziv,R,Rocky,18/05/2021,2021,45,45,Spring,Achziv45,AchzivR454Spring2021,5,0.666666667,SE,Serranus cabrilla,12,2,18765,fish
 1,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN451Spring2021,5,0.666666667,SE,Coris julis,12,2,18774,fish
-2,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN452Spring2021,5,0.666666667,SE,Empty transect,NA,NA,18774,fish
-3,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN453Spring2021,6,0.555555556,SE,Empty transect,NA,NA,18774,fish
+2,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN452Spring2021,5,0.666666667,SE,Empty transect,NA,3,18774,fish
+3,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN453Spring2021,6,0.555555556,SE,Empty transect,NA,3,18774,fish
 4,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN454Spring2021,5,0.666666667,SE,Serranus cabrilla,10,2,18774,fish
 4,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN454Spring2021,5,0.666666667,SE,Coris julis,6,2,18774,fish
 4,a,Naharia,N,Rocky,27/05/2021,2021,45,45,Spring,Naharia45,NahariaN454Spring2021,5,0.666666667,SE,Coris julis,6,2,18774,fish

@@ -1,0 +1,193 @@
+---
+title: "Data processing for chapter 3: 25-45 m sites" MKMRS data of fish survey  and invertebrate photoquadrates
+output: html_document
+date: "2022-11-10"
+preparing 3 data sets and combined data sets:
+WHEN UPDATING A NEW FISH_SURVEY FILE- CORRECT VIVIBILITY TO 7 AT AchzivR453Spring2020
+AchzivR454Spring2020
+
+---
+
+### step 1 load data library etc and set wd
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(readr)
+library(plyr)
+library(ggplot2)
+# library(dplyr)
+# library(labdsv)
+# library(tidyverse)
+# library(reshape2)
+# library(vegan)
+# library(assertthat)
+# library(devtools)
+#For Diversity calculations
+# library(plotrix)
+# library(betapart)
+library(here)
+# library(ggridges)
+
+# library(ggtext)# for italics in the plot legend 
+# library(ggpubr) 
+# Richness
+# library(rareNMtests)
+# library(mobr)
+library(rfishbase)
+here<-here::here
+color6 = c("lightblue3", "blue2", "darkblue")
+
+```
+
+```{r}
+# Define the path to your CSV file using here()
+csv_path <- here("R.generated.Data", "grouped_long.csv")
+csv_path1 <- here("Data", "Belmaker_Species_Traits.csv")
+csv_path3 <-here("Data", "Diet.csv")
+
+# Read the CSV files
+
+fish_data <- read.csv(csv_path)
+traits <- read.csv(csv_path1)
+diet <- read.csv(csv_path3)
+
+```
+#Getting Fishbase length size and categories according to Medeiros 2021
+```{r}
+
+# Assuming your dataframe is called 'df' and has a column named 'species'
+
+# Get the length data from rfishbase
+
+select_traits <-traits %>% 
+  select(1,22:25)%>% 
+  rename(species = Species_updated_name_fishbase)
+# Merge the length data with your original dataframe
+species_lengths <- species(select_traits$species, fields = c("Species", "Length")) %>% 
+  rename(species= Species)
+
+trait_with_lengths <- select_traits %>% 
+  left_join(diet, by = "species") %>% 
+  left_join(species_lengths, by = "species")
+  
+
+# Function to assign size category
+assign_size_category <- function(length) {
+  case_when(
+    length <= 7 ~ "1",
+    length > 7 & length <= 15 ~ "2",
+    length > 15 & length <= 30 ~ "3",
+    length > 30 & length <= 50 ~ "4",
+    length > 50 & length <= 80 ~ "5",
+    length > 80 ~ "6",
+    TRUE ~ "Unknown"
+  )
+}
+
+
+# Add size category to the dataframe
+trait_final <- trait_with_lengths %>%
+  mutate(size_category = assign_size_category(Length))
+
+# View the result
+print(trait_final)
+csv_path2 <- here("R.generated.Data", "Belmaker_Traits_size.csv")
+write.csv(trait_final,csv_path2)
+```
+#merge with my data
+```{r}
+
+
+
+fish_data_trait <-merge(fish_data,trait_final, by= "species")
+
+
+
+traitsNet <-fish_data_trait %>%  select(5,7,13:17,19,9) %>% 
+   na.omit()
+colnames(traitsNet)
+traitsNetSumm <- traitsNet %>% 
+  dplyr::group_by(across(Year_season_id:size_category)) %>% 
+ dplyr::summarise(abund = sum(total_ind))
+traitsNetSumm
+
+
+```
+
+###Finally, lets convert our data to wide format:
+```{r}
+trait_wide <- traitsNetSumm %>%
+  pivot_wider(
+    id_cols = c(Year_season_id, depth_category), # Assuming 'species' is your identifier column
+    names_from = c(Home_range, Activity, Schooling, Water_level, Diet, size_category),
+    values_from = abund,
+    values_fill = 0
+  )
+head(trait_wide)
+colnames(trait_wide)
+
+
+```
+# Calculate Hill numbers
+```{r}
+meta_data <- trait_wide[,1:2] # columns i want to keep from my data
+trait_comb <-trait_wide[,3:32]
+
+
+```
+### Hill numbers profile Allways use  hill = T
+```{r}
+renyi_profile <- renyi(trait_comb,  
+                       scales = c(0,  1.0, 2),
+                       hill = T)
+renyi_df<-bind_cols(meta_data,renyi_profile)
+colnames(renyi_df)
+renyi_df<-gather(renyi_df,"Q","Value",3:5)
+head(renyi_df)
+renyi_df<-renyi_df %>% 
+   filter(!is.na(Q))
+
+renyi_df$Q <- as.numeric(renyi_df$Q)
+
+```
+#plotting 
+```{r}
+ggplot(renyi_df, aes(x = as.factor(depth_category), y = Value, fill = as.factor(depth_category))) +
+  geom_boxplot(notch=TRUE, notchwidth = 0.8) +
+  facet_wrap(~ Q, scales = "free_y") +
+  labs(title = "Hill Numbers Trait Diversity Across Depth Categories",
+       x = "Depth (m')",
+       y = "Hill numbers") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_manual(values = color6)
+```
+
+#Calculate Gower distance matrix
+```{r}
+library(cluster)
+library(factoextra)
+fish_data_gower <- cluster::daisy(x= traitsNetSumm[3:8], metric = "gower", type = list(ordratio = 1:6))
+gower_matrix <- as.matrix(fish_data_gower)
+
+colnames(fish_data_trait)
+colnames(traitsNet)
+
+# Perform hierarchical clustering
+hc <- hclust(gower_dist, method = "complete")
+
+# Plot dendrogram
+plot(hc, main = "Hierarchical Clustering Dendrogram", xlab = "Samples")
+
+# Perform Multidimensional Scaling (MDS)
+mds <- cmdscale(gower_dist, k = 3)
+
+# Create a data frame for plotting
+mds_df <- as.data.frame(mds)
+colnames(mds_df) <- c("Dim1", "Dim2")
+mds_df$Category <- traitsNet$depth_category
+
+```
